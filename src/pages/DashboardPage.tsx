@@ -40,7 +40,6 @@ export default function DashboardPage({
   const [ogpStart, setOgpStart] = useState('');
 
   const stats = useMemo(() => {
-    // ✅ Fix 6 — dates computed inside memo so they're always fresh
     const now   = new Date();
     const d7    = new Date(now); d7.setDate(d7.getDate() + 7);
     const d30   = new Date(now); d30.setDate(d30.getDate() + 30);
@@ -50,10 +49,10 @@ export default function DashboardPage({
     const expired      = active.filter(p => new Date(p.expiryDate) < now);
     const exp7         = active.filter(p => { const e = new Date(p.expiryDate); return e >= now && e <= d7; });
     const exp30        = active.filter(p => { const e = new Date(p.expiryDate); return e >= now && e <= d30; });
-    const todayIn      = movements.filter(m => m.type === 'IN'  && new Date(m.createdAt||m.createdAt||m.date||"").toDateString() === today);
-    const todayOut     = movements.filter(m => m.type === 'OUT' && new Date(m.createdAt||m.createdAt||m.date||"").toDateString() === today);
-    const totalCartons = active.reduce((s, p) => s + (p.cartons || 0), 0);
-    const totalWeight  = active.reduce((s, p) => s + (Number(p.totalWeight) || 0), 0);
+    const todayIn      = movements.filter(m => m.type === 'IN'  && new Date(m.createdAt||m.date||"").toDateString() === today);
+    const todayOut     = movements.filter(m => m.type === 'OUT' && new Date(m.createdAt||m.date||"").toDateString() === today);
+    const totalCartons = active.reduce((s, p) => s + Number(p.cartons || 0), 0);
+    const totalWeight  = active.reduce((s, p) => s + Number(p.totalWeight || 0), 0);
 
     const docAlerts: { label: string; type: string; expiry: string; urgent: boolean }[] = [];
     vehicles.forEach(v => {
@@ -85,14 +84,14 @@ export default function DashboardPage({
   }, [pallets, movements, vehicles, drivers, customers]);
 
   const chartData = useMemo(() => {
-    const now = new Date();   // ✅ fresh date inside memo
+    const now = new Date();
     const days = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(now); d.setDate(d.getDate() - i);
       const label = d.toLocaleDateString('en-PK', { weekday: 'short', day: 'numeric' });
       const dateStr = d.toDateString();
-      const inQty  = movements.filter(m => m.type === 'IN'  && new Date(m.createdAt||m.createdAt||m.date||"").toDateString() === dateStr).reduce((s, m) => s + Number(m.cartons), 0);
-      const outQty = movements.filter(m => m.type === 'OUT' && new Date(m.createdAt||m.createdAt||m.date||"").toDateString() === dateStr).reduce((s, m) => s + Number(m.cartons), 0);
+      const inQty  = movements.filter(m => m.type === 'IN'  && new Date(m.createdAt||m.date||"").toDateString() === dateStr).reduce((s, m) => s + Number(m.cartons), 0);
+      const outQty = movements.filter(m => m.type === 'OUT' && new Date(m.createdAt||m.date||"").toDateString() === dateStr).reduce((s, m) => s + Number(m.cartons), 0);
       days.push({ label, inQty, outQty });
     }
     return days;
@@ -100,19 +99,17 @@ export default function DashboardPage({
 
   const maxChart = Math.max(...chartData.map(d => Math.max(d.inQty, d.outQty)), 1);
 
-  // TEMPERATURE DEVIATION ALERTS: compute rooms where actual temp deviates >2°C from target
   const tempAlerts = useMemo(() => {
     const alerts: { room: string; latest: number; target: number; delta: number }[] = [];
     rooms.forEach(r => {
       const readings = temperatures.filter(t => t.room === r.name);
       if (readings.length === 0) return;
-      // Most recent reading first (temperatures array is newest-first)
       const latest = readings[0].temperature;
       const target = r.temperature;
       const delta  = Math.abs(latest - target);
       if (delta > 2) alerts.push({ room: r.name, latest, target, delta });
     });
-    return alerts.sort((a, b) => b.delta - a.delta); // worst deviation first
+    return alerts.sort((a, b) => b.delta - a.delta);
   }, [rooms, temperatures]);
 
   const latestTemp = (room: string) => {
@@ -120,7 +117,6 @@ export default function DashboardPage({
     return r ? r.temperature : null;
   };
 
-  // ── Unified password gate — works for any admin action ──────────────────
   const requirePassword = (action: 'counters' | 'clear-data') => {
     if (!isAdmin) return;
     setAdminPassword('');
@@ -132,7 +128,6 @@ export default function DashboardPage({
   const openCounterModal  = () => requirePassword('counters');
   const openClearDataModal = () => requirePassword('clear-data');
 
-  // C1 FIX: Admin password gate now uses async hash verification
   const verifyPasswordAndOpen = useCallback(async () => {
     if (!currentUser?.password) return;
     const ok = await verifyPassword(adminPassword, currentUser.password);
@@ -174,7 +169,6 @@ export default function DashboardPage({
   return (
     <div className="flex-1 overflow-y-auto p-3 sm:p-6 space-y-4 sm:space-y-5">
 
-      {/* Counter setup banner */}
       {!counters.igpInitialized && (
         <div className="rounded-xl p-4 flex items-center justify-between"
           style={{ background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.3)' }}>
@@ -212,15 +206,13 @@ export default function DashboardPage({
         </div>
       )}
 
-      {/* Stats row 1 */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard label="Active Pallets"  value={stats.totalActive}  icon={Package}     color="#2BB8E8" sub={`${stats.totalCartons.toLocaleString()} units`} />
-        <StatCard label="Total Weight"    value={`${(Number(stats.totalWeight)/1000).toFixed(1)}t`} icon={BarChart3}  color="#2BB8E8" sub={`${stats.totalWeight.toLocaleString()} kg`} />
+        <StatCard label="Total Weight"    value={`${(Number(stats.totalWeight)/1000).toFixed(1)}t`} icon={BarChart3}  color="#2BB8E8" sub={`${Number(stats.totalWeight).toLocaleString()} kg`} />
         <StatCard label="Stock IN Today"  value={stats.todayIn}      icon={TrendingDown} color="#4ade80" sub="units received"    onClick={() => onNavigate('stock-in')} />
         <StatCard label="Stock OUT Today" value={stats.todayOut}     icon={TrendingUp}   color="#f97316" sub="units dispatched"  onClick={() => onNavigate('stock-out')} />
       </div>
 
-      {/* Stats row 2 — expiry alerts */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <StatCard label="Expired Stock"    value={stats.expired}  icon={AlertTriangle} color="#ef4444" sub="needs removal"   onClick={() => onNavigate('expiry-alerts')} />
         <StatCard label="Expiring in 7d"   value={stats.exp7}     icon={Clock}         color="#f97316" sub="urgent action"   onClick={() => onNavigate('expiry-alerts')} />
@@ -228,8 +220,6 @@ export default function DashboardPage({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
-        {/* Chart */}
         <div className="col-span-1 lg:col-span-2 rounded-xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold ">7-Day Activity (Units)</h3>
@@ -253,7 +243,6 @@ export default function DashboardPage({
           </div>
         </div>
 
-        {/* Room temps */}
         <div className="rounded-xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
           <h3 className="text-sm font-semibold  mb-3 flex items-center gap-2">
             <Thermometer className="w-4 h-4" style={{ color: 'var(--primary)' }} /> Room Temps
@@ -286,7 +275,6 @@ export default function DashboardPage({
         </div>
       </div>
 
-      {/* TEMPERATURE DEVIATION ALERTS — shows when actual temp is >2°C off target */}
       {tempAlerts.length > 0 && (
         <div className="rounded-xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid rgba(239,68,68,0.25)' }}>
           <h3 className="text-sm font-semibold mb-3 flex items-center gap-2" style={{ color: '#ef4444' }}>
@@ -312,7 +300,6 @@ export default function DashboardPage({
         </div>
       )}
 
-      {/* Document / Driver / Vehicle Alerts */}
       {stats.docAlerts.length > 0 && (
         <div className="rounded-xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid rgba(234,179,8,0.2)' }}>
           <h3 className="text-sm font-semibold mb-3 flex items-center gap-2" style={{ color: '#facc15' }}>
@@ -333,7 +320,6 @@ export default function DashboardPage({
         </div>
       )}
 
-      {/* Recent movements */}
       <div className="rounded-xl p-4" style={{ background: 'var(--bg-card)', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold ">Recent Transactions</h3>
@@ -353,7 +339,7 @@ export default function DashboardPage({
               <span className="ml-auto font-medium flex-shrink-0" style={{ color: m.type === 'IN' ? '#4ade80' : '#f97316' }}>
                 {m.type === 'OUT' ? '-' : '+'}{m.cartons}
               </span>
-              <span className="flex-shrink-0" style={{ color: 'var(--text-secondary)' }}>{new Date(m.createdAt||m.createdAt||m.date||"").toLocaleDateString('en-PK', { day:'2-digit', month:'short' })}</span>
+              <span className="flex-shrink-0" style={{ color: 'var(--text-secondary)' }}>{new Date(m.createdAt||m.date||"").toLocaleDateString('en-PK', { day:'2-digit', month:'short' })}</span>
             </div>
           ))}
           {movements.length === 0 && (
@@ -362,7 +348,6 @@ export default function DashboardPage({
         </div>
       </div>
 
-      {/* Reset Confirmation Dialog */}
       {showResetConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
           <div className="w-full max-w-sm rounded-2xl p-6" style={{ background: 'var(--bg-card)', border: '1px solid rgba(239,68,68,0.3)' }}>
@@ -372,16 +357,6 @@ export default function DashboardPage({
               </div>
               <h2 className="text-base font-bold ">Reset Document Counters?</h2>
             </div>
-            <p className="text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>
-              Current counters:
-            </p>
-            <div className="rounded-lg px-3 py-2 mb-4 text-sm font-mono" style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)' }}>
-              <div>IGP: <span className="text-red-400">{counters.igpSeq}</span> (last used)</div>
-              <div>OGP: <span className="text-red-400">{counters.ogpSeq}</span> (last used)</div>
-            </div>
-            <p className="text-xs mb-5" style={{ color: '#f87171' }}>
-              Warning: Resetting will change the sequence. Only do this if you made a mistake. This cannot be undone.
-            </p>
             <div className="flex gap-3">
               <button onClick={() => setShowResetConfirm(false)}
                 className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
@@ -398,9 +373,6 @@ export default function DashboardPage({
         </div>
       )}
 
-
-
-      {/* Password Verification Modal */}
       {showPasswordModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }}>
           <div className="w-full max-w-sm rounded-2xl p-6" style={{ background: 'var(--bg-card)', border: `1px solid ${pendingAction === 'clear-data' ? 'rgba(239,68,68,0.4)' : 'rgba(239,68,68,0.3)'}` }}>
@@ -463,7 +435,6 @@ export default function DashboardPage({
         </div>
       )}
 
-      {/* Counter Modal */}
       {showCounterModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }}>
           <div className="w-full max-w-md rounded-2xl p-6" style={{ background: 'var(--bg-card)', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
@@ -513,5 +484,3 @@ export default function DashboardPage({
     </div>
   );
 }
-
-
