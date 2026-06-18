@@ -432,7 +432,7 @@ function AppContent() {
   };
 
   return (
-    <Layout currentPage={currentPage} onNavigate={navigate} permissions={perms} onBackup={handleBackup} isRefreshing={store.isRefreshing} lastSync={store.lastSync} onManualRefresh={store.manualRefresh}>
+    <Layout currentPage={currentPage} onNavigate={navigate} permissions={perms} onBackup={handleBackup} isRefreshing={store.isRefreshing} lastSync={store.lastSync} onManualRefresh={store.manualRefresh} syncError={store.syncError}>
       {renderPage()}
     </Layout>
   );

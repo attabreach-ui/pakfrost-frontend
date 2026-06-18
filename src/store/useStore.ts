@@ -21,6 +21,19 @@ const DEFAULT_ROOMS: Room[] = [
   { id:'ar', name:'Ante Room', maxPallets:30,  currentPallets:0, temperature:0,   status:'normal', isAnteRoom:true },
 ];
 
+function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'string') return err;
+  return 'Unable to connect to the API';
+}
+
+function summarizeFailures(failures: { name: string; reason: unknown }[]): string | null {
+  if (failures.length === 0) return null;
+  const endpointNames = failures.map(f => f.name).join(', ');
+  const messages = Array.from(new Set(failures.map(f => getErrorMessage(f.reason)))).join('; ');
+  return `Could not sync ${endpointNames}. ${messages}`;
+}
+
 export function useStore(isLoggedIn = false) {
   const [users,        setUsers]        = useState<User[]>([]);
   const [customers,    setCustomers]    = useState<Customer[]>([]);
@@ -36,36 +49,44 @@ export function useStore(isLoggedIn = false) {
   const [isLoading,    setIsLoading]    = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastSync,     setLastSync]     = useState<Date | null>(null);
+  const [syncError,    setSyncError]    = useState<string | null>(null);
 
   const loadAll = useCallback(async (initial = false) => {
     if (initial) setIsLoading(true);
     else setIsRefreshing(true);
     try {
-      const [u, cu, p, d, v, pal, mov, tmp, igp, ogp] = await Promise.all([
-        usersApi.getAll(),
-        customersApi.getAll(),
-        productsApi.getAll(),
-        driversApi.getAll(),
-        vehiclesApi.getAll(),
-        palletsApi.getAll(),
-        movementsApi.getAll({ limit: 500 }),
-        temperatureApi.getAll({ limit: 100 }),
-        stockApi.nextIGP(),
-        stockApi.nextOGP(),
-      ]);
-      setUsers(        (u   as any).data ?? []);
-      setCustomers(    (cu  as any).data ?? []);
-      setProducts(     (p   as any).data ?? []);
-      setDrivers(      (d   as any).data ?? []);
-      setVehicles(     (v   as any).data ?? []);
-      setPallets(      (pal as any).data ?? []);
-      setMovements(    (mov as any).data?.data ?? (mov as any).data ?? []);
-      setTemperatures( (tmp as any).data ?? []);
-      setNextIGPNum(   (igp as any).data?.number ?? 'IGP-0001');
-      setNextOGPNum(   (ogp as any).data?.number ?? 'OGP-0001');
-      setLastSync(new Date());
+      const requests = [
+        { name: 'users',        promise: usersApi.getAll(),                    apply: (r: any) => setUsers(r.data ?? []) },
+        { name: 'customers',    promise: customersApi.getAll(),                apply: (r: any) => setCustomers(r.data ?? []) },
+        { name: 'products',     promise: productsApi.getAll(),                 apply: (r: any) => setProducts(r.data ?? []) },
+        { name: 'drivers',      promise: driversApi.getAll(),                  apply: (r: any) => setDrivers(r.data ?? []) },
+        { name: 'vehicles',     promise: vehiclesApi.getAll(),                 apply: (r: any) => setVehicles(r.data ?? []) },
+        { name: 'pallets',      promise: palletsApi.getAll(),                  apply: (r: any) => setPallets(r.data ?? []) },
+        { name: 'movements',    promise: movementsApi.getAll({ limit: 500 }),  apply: (r: any) => setMovements(r.data?.data ?? r.data ?? []) },
+        { name: 'temperature',  promise: temperatureApi.getAll({ limit: 100 }), apply: (r: any) => setTemperatures(r.data ?? []) },
+        { name: 'next IGP',     promise: stockApi.nextIGP(),                   apply: (r: any) => setNextIGPNum(r.data?.number ?? 'IGP-0001') },
+        { name: 'next OGP',     promise: stockApi.nextOGP(),                   apply: (r: any) => setNextOGPNum(r.data?.number ?? 'OGP-0001') },
+      ];
+
+      const results = await Promise.allSettled(requests.map(r => r.promise));
+      const failures: { name: string; reason: unknown }[] = [];
+      let successCount = 0;
+
+      results.forEach((result, index) => {
+        const request = requests[index];
+        if (result.status === 'fulfilled') {
+          request.apply(result.value);
+          successCount += 1;
+        } else {
+          failures.push({ name: request.name, reason: result.reason });
+        }
+      });
+
+      setSyncError(summarizeFailures(failures));
+      if (successCount > 0) setLastSync(new Date());
     } catch (err) {
       console.error('Failed to load store data:', err);
+      setSyncError(`Could not sync data. ${getErrorMessage(err)}`);
     } finally {
       if (initial) setIsLoading(false);
       else setIsRefreshing(false);
@@ -74,19 +95,37 @@ export function useStore(isLoggedIn = false) {
 
   // ── Refresh helpers — BEFORE useEffect ───────────────────────────────────
   const refreshPallets = useCallback(async () => {
-    const res: any = await palletsApi.getAll();
-    setPallets(res.data ?? []);
+    try {
+      const res: any = await palletsApi.getAll();
+      setPallets(res.data ?? []);
+      setSyncError(null);
+    } catch (err) {
+      setSyncError(`Could not refresh pallets. ${getErrorMessage(err)}`);
+      throw err;
+    }
   }, []);
 
   const refreshMovements = useCallback(async () => {
-    const res: any = await movementsApi.getAll({ limit: 500 });
-    setMovements(res.data?.data ?? res.data ?? []);
+    try {
+      const res: any = await movementsApi.getAll({ limit: 500 });
+      setMovements(res.data?.data ?? res.data ?? []);
+      setSyncError(null);
+    } catch (err) {
+      setSyncError(`Could not refresh movements. ${getErrorMessage(err)}`);
+      throw err;
+    }
   }, []);
 
   const refreshCounters = useCallback(async () => {
-    const [igp, ogp]: any[] = await Promise.all([stockApi.nextIGP(), stockApi.nextOGP()]);
-    setNextIGPNum(igp.data?.number ?? 'IGP-0001');
-    setNextOGPNum(ogp.data?.number ?? 'OGP-0001');
+    try {
+      const [igp, ogp]: any[] = await Promise.all([stockApi.nextIGP(), stockApi.nextOGP()]);
+      setNextIGPNum(igp.data?.number ?? 'IGP-0001');
+      setNextOGPNum(ogp.data?.number ?? 'OGP-0001');
+      setSyncError(null);
+    } catch (err) {
+      setSyncError(`Could not refresh document counters. ${getErrorMessage(err)}`);
+      throw err;
+    }
   }, []);
 
   const pollVolatile = useCallback(async () => {
@@ -101,7 +140,10 @@ export function useStore(isLoggedIn = false) {
       setMovements(    (mov as any).data?.data ?? (mov as any).data ?? []);
       setTemperatures( (tmp as any).data ?? []);
       setLastSync(new Date());
-    } catch { /* silent */ }
+    } catch (err) {
+      console.error('Failed to refresh live data:', err);
+      setSyncError(`Could not refresh live data. ${getErrorMessage(err)}`);
+    }
   }, []);
 
   useEffect(() => {
@@ -113,8 +155,8 @@ export function useStore(isLoggedIn = false) {
       onMovementsChange:   () => refreshMovements(),
       onTemperatureChange: () => {
         temperatureApi.getAll({ limit: 100 })
-          .then((r: any) => setTemperatures(r.data ?? []))
-          .catch(() => {});
+          .then((r: any) => { setTemperatures(r.data ?? []); setSyncError(null); })
+          .catch((err) => setSyncError(`Could not refresh temperature. ${getErrorMessage(err)}`));
       },
     });
 
@@ -316,6 +358,7 @@ export function useStore(isLoggedIn = false) {
 
   return {
     isLoading, isRefreshing, lastSync, manualRefresh,
+    syncError,
     users, customers, drivers, vehicles, products,
     pallets, movements, temperatures,
     rooms: computedRooms,

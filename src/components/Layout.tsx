@@ -34,9 +34,10 @@ interface LayoutProps {
   isRefreshing?: boolean;
   lastSync?: Date | null;
   onManualRefresh?: () => void;
+  syncError?: string | null;
 }
 
-export default function Layout({ currentPage, onNavigate, permissions, onBackup, children, isRefreshing, lastSync, onManualRefresh }: LayoutProps) {
+export default function Layout({ currentPage, onNavigate, permissions, onBackup, children, isRefreshing, lastSync, onManualRefresh, syncError }: LayoutProps) {
   const { currentUser, logout, sessionWarning, extendSession } = useAuth();
   const { isDark, toggle: toggleTheme } = useTheme();
 
@@ -340,6 +341,17 @@ export default function Layout({ currentPage, onNavigate, permissions, onBackup,
                 style={{ background: 'linear-gradient(135deg,#0284C7,#38BDF8)', color: 'white' }}>
                 {currentUser?.name?.[0]?.toUpperCase() || 'U'}
               </div>
+            </div>
+          </div>
+        )}
+
+        {syncError && (
+          <div className="mx-3 mt-3 sm:mx-6 sm:mt-4 rounded-lg px-3 py-2.5 text-xs sm:text-sm flex items-start gap-2"
+            style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', color: '#dc2626' }}>
+            <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <div className="font-semibold">Data sync failed</div>
+              <div className="break-words">{syncError}</div>
             </div>
           </div>
         )}
