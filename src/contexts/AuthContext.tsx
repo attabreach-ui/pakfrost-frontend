@@ -1,8 +1,8 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
+import { API_URL, setAccessToken } from '../api/client';
 
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 const WARN_BEFORE_MS = 5 * 60 * 1000;
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api/v1';
 
 interface User {
   id: string;
@@ -40,7 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     setCurrentUser(null);
     setSessionWarning(false);
-    localStorage.removeItem('pf_accessToken');
+    setAccessToken(null);
     localStorage.removeItem('pf_refreshToken');
     localStorage.removeItem('pf_currentUser');
   }, []);
@@ -90,7 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { ok: false, error: data.message ?? 'Invalid username or password' };
       }
       const { tokens, user } = data.data;
-      localStorage.setItem('pf_accessToken', tokens.accessToken);
+      setAccessToken(tokens.accessToken);
       localStorage.setItem('pf_refreshToken', tokens.refreshToken);
       setCurrentUser(user);
       lastActivityRef.current = Date.now();

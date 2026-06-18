@@ -6,7 +6,7 @@
  */
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api/v1';
+export const API_URL = import.meta.env.VITE_API_URL || 'https://pakfrost-api.onrender.com/api/v1';
 
 // ── Token storage (in-memory for security) ─────────────────────────────────
 // Page refresh ke baad localStorage se accessToken restore karo
