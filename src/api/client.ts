@@ -6,7 +6,12 @@
  */
 import axios from 'axios';
 
-export const API_URL = import.meta.env.VITE_API_URL || 'https://pakfrost-api.onrender.com/api/v1';
+const RENDER_API_URL = 'https://pakfrost-api.onrender.com/api/v1';
+const configuredApiUrl = import.meta.env.VITE_API_URL?.trim();
+
+export const API_URL = configuredApiUrl === 'https://pakfrost-backend.vercel.app/api/v1'
+  ? RENDER_API_URL
+  : configuredApiUrl || RENDER_API_URL;
 
 // ── Token storage (in-memory for security) ─────────────────────────────────
 // Page refresh ke baad localStorage se accessToken restore karo
