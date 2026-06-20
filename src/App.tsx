@@ -23,7 +23,7 @@ function AppContent() {
   const [, setKey] = useState(0);
   const refresh = useCallback(() => setKey(k => k + 1), []);
 
-  const store = useStore(!!currentUser);
+  const store = useStore(!!currentUser, currentUser?.role === 'admin');
 
   // Wrap updateUser so AuthContext stays in sync when current user is edited
   const handleUpdateUser = useCallback((id: string, updates: Partial<any>) => {
@@ -33,233 +33,150 @@ function AppContent() {
     }
   }, [store, currentUser, updateCurrentUser]);
 
-  // ✅ handleBackup — Professional styled Excel with colors
+  // Backup export without vulnerable spreadsheet dependencies.
   const handleBackup = useCallback(async () => {
     try {
-      const XLSX = await import('xlsx');
-      const wb = XLSX.utils.book_new();
       const today = new Date();
       const dateStr = today.toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' });
 
-      // ── Colour palette ────────────────────────────────────────
-      const COL = {
-        navy:    '0C3547',  // title bg
-        navyMid: '1A5276',  // subtitle bg
-        blue:    '2471A3',  // header row bg
-        blueLt:  'AED6F1',  // border colour
-        rowAlt:  'EBF5FB',  // even data row
-        white:   'FFFFFF',
-        labelBg: 'D6EAF8',
-        dark:    '1B2631',
+      const esc = (value: any) => String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+      const sheetName = (name: string) => esc(name.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31));
+      const formatDate = (value: any) => {
+        if (!value) return '';
+        const d = new Date(value);
+        return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PK');
       };
-
-      // ── Cell builder helpers ──────────────────────────────────
-      const cell = (v: any, t: 's'|'n'|'b', fill: string, fontColor = COL.white, bold = false, sz = 10): any => ({
-        v, t, s: {
-          fill: { patternType: 'solid', fgColor: { rgb: fill } },
-          font: { bold, color: { rgb: fontColor }, sz, name: 'Calibri' },
-          alignment: { horizontal: 'left', vertical: 'center', wrapText: false },
-          border: {
-            top:    { style: 'thin', color: { rgb: COL.blueLt } },
-            bottom: { style: 'thin', color: { rgb: COL.blueLt } },
-            left:   { style: 'thin', color: { rgb: COL.blueLt } },
-            right:  { style: 'thin', color: { rgb: COL.blueLt } },
-          }
-        }
-      });
-
-      const titleCell  = (v: string) => cell(v, 's', COL.navy,    COL.white, true,  14);
-      const subCell    = (v: string) => cell(v, 's', COL.navyMid, COL.white, false, 10);
-      const hdrCell    = (v: string) => cell(v, 's', COL.blue,    COL.white, true,  10);
-      const dataCell   = (v: any, even: boolean) => {
-        const t = typeof v === 'number' ? 'n' : 's';
-        return cell(v ?? '', t, even ? COL.rowAlt : COL.white, COL.dark, false, 10);
-      };
-      const summLabel  = (v: string) => cell(v, 's', COL.navyMid, COL.white, true,  10);
-      const summValue  = (v: any)    => cell(v ?? '', typeof v === 'number' ? 'n' : 's', COL.labelBg, COL.dark, true, 10);
-
-      // ── Build sheet helper ────────────────────────────────────
-      const buildSheet = (title: string, headers: string[], dataRows: any[][], colWidths: number[]) => {
-        const ws: any = {};
-        const nCols = headers.length;
-
-        // Row 1: Title (merged)
-        ws['A1'] = titleCell(`PAKFROST (PVT) LIMITED — ${title}`);
-        for (let c2 = 1; c2 < nCols; c2++) {
-          ws[XLSX.utils.encode_cell({ r: 0, c: c2 })] = cell('', 's', COL.navy);
-        }
-
-        // Row 2: Subtitle
-        ws['A2'] = subCell(`Generated: ${dateStr}   |   Cold Storage WMS`);
-        for (let c2 = 1; c2 < nCols; c2++) {
-          ws[XLSX.utils.encode_cell({ r: 1, c: c2 })] = cell('', 's', COL.navyMid);
-        }
-
-        // Row 3: blank spacer
-        ws['A3'] = cell('', 's', COL.white, COL.dark);
-
-        // Row 4: Headers
-        headers.forEach((h, ci) => {
-          ws[XLSX.utils.encode_cell({ r: 3, c: ci })] = hdrCell(h);
+      const formatDateTime = (value: any) => {
+        if (!value) return '';
+        const d = new Date(value);
+        return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('en-PK', {
+          day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
         });
-
-        // Data rows
-        dataRows.forEach((row, ri) => {
-          const even = ri % 2 === 0;
-          row.forEach((val, ci) => {
-            ws[XLSX.utils.encode_cell({ r: 4 + ri, c: ci })] = dataCell(val, even);
-          });
-        });
-
-        // Sheet range
-        ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 3 + dataRows.length, c: nCols - 1 } });
-
-        // Merges: title + subtitle across all columns
-        ws['!merges'] = [
-          { s: { r: 0, c: 0 }, e: { r: 0, c: nCols - 1 } },
-          { s: { r: 1, c: 0 }, e: { r: 1, c: nCols - 1 } },
-        ];
-
-        // Column widths
-        ws['!cols'] = colWidths.map(w => ({ wch: w }));
-
-        // Freeze header
-        ws['!freeze'] = { xSplit: 0, ySplit: 4 };
-
-        return ws;
+      };
+      const cell = (value: any, style = 'Data') => {
+        const isNumber = typeof value === 'number' && Number.isFinite(value);
+        const type = isNumber ? 'Number' : 'String';
+        return `<Cell ss:StyleID="${style}"><Data ss:Type="${type}">${esc(value)}</Data></Cell>`;
+      };
+      const buildSheet = (title: string, headers: string[], rows: any[][], widths: number[]) => {
+        const columns = widths.map(w => `<Column ss:Width="${w * 7}"/>`).join('');
+        const headerRow = `<Row>${headers.map(h => cell(h, 'Header')).join('')}</Row>`;
+        const bodyRows = rows.map((row, index) =>
+          `<Row>${row.map(v => cell(v, index % 2 === 0 ? 'DataAlt' : 'Data')).join('')}</Row>`
+        ).join('');
+        return `
+          <Worksheet ss:Name="${sheetName(title)}">
+            <Table>
+              ${columns}
+              <Row><Cell ss:MergeAcross="${Math.max(headers.length - 1, 0)}" ss:StyleID="Title"><Data ss:Type="String">${esc(`PAKFROST (PVT) LIMITED - ${title}`)}</Data></Cell></Row>
+              <Row><Cell ss:MergeAcross="${Math.max(headers.length - 1, 0)}" ss:StyleID="Subtitle"><Data ss:Type="String">${esc(`Generated: ${dateStr} | Cold Storage WMS`)}</Data></Cell></Row>
+              <Row></Row>
+              ${headerRow}
+              ${bodyRows}
+            </Table>
+            <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+              <FreezePanes/><FrozenNoSplit/><SplitHorizontal>4</SplitHorizontal><TopRowBottomPane>4</TopRowBottomPane><ActivePane>2</ActivePane>
+            </WorksheetOptions>
+          </Worksheet>`;
       };
 
-      // ── 1. Active Inventory ───────────────────────────────────
-      const invHeaders = ['IGP No', 'Customer', 'Product', 'Code', 'Qty', 'Weight', 'Total Wt (Kg)', 'Pack Type', 'Room', 'Location', 'Mfg Date', 'Expiry Date', 'Date In'];
-      const invData = store.pallets.filter(p => p.status === 'active').map(p => [
-        p.igpNumber, p.customerName, p.productName, p.productCode,
-        p.cartons, p.weightPerCarton, p.totalWeight, p.packingType || 'Carton',
-        p.room, p.room === 'Ante Room' ? 'Floor' : `${p.side}${p.row}-${p.slot}`,
-        p.mfgDate || '', p.expiryDate,
-        new Date(p.dateIn).toLocaleDateString('en-PK'),
-      ]);
-      XLSX.utils.book_append_sheet(wb, buildSheet('Active Inventory', invHeaders, invData, [10, 16, 22, 10, 6, 8, 13, 10, 10, 12, 12, 13, 13]), 'Active Inventory');
-
-      // ── 2. Stock IN History ───────────────────────────────────
-      const inMoves = store.movements.filter(m => m.type === 'IN');
-      const inHeaders = ['IGP No', 'Date', 'Customer', 'Product', 'Qty', 'Total Wt (Kg)', 'Vehicle', 'Driver', 'Operator'];
-      const inData = inMoves.map(m => [
-        m.docNumber, new Date(m.createdAt||m.date||"").toLocaleDateString('en-PK'),
-        m.customerName, m.productName, m.cartons, m.totalWeight,
-        m.vehicleNo || '', m.driverName || '', m.operatorName || '',
-      ]);
-      XLSX.utils.book_append_sheet(wb, buildSheet('Stock IN History', inHeaders, inData, [10, 12, 16, 22, 8, 13, 14, 16, 14]), 'Stock IN History');
-
-      // ── 3. Stock OUT History ──────────────────────────────────
-      const outMoves = store.movements.filter(m => m.type === 'OUT');
-      const outHeaders = ['OGP No', 'Date', 'Customer', 'Product', 'Qty', 'Total Wt (Kg)', 'Vehicle', 'Driver', 'Destination', 'Operator'];
-      const outData = outMoves.map(m => [
-        m.docNumber, new Date(m.createdAt||m.date||"").toLocaleDateString('en-PK'),
-        m.customerName, m.productName, m.cartons, m.totalWeight,
-        m.vehicleNo || '', m.driverName || '', m.destination || '', m.operatorName || '',
-      ]);
-      XLSX.utils.book_append_sheet(wb, buildSheet('Stock OUT History', outHeaders, outData, [10, 12, 16, 22, 8, 13, 14, 16, 18, 14]), 'Stock OUT History');
-
-      // ── 4. Customers ──────────────────────────────────────────
-      const custHeaders = ['Code', 'Name', 'Contact Person', 'Phone', 'Email', 'Temp Req.', 'Contract Expiry', 'Status'];
-      const custData = store.customers.map(cu => [
-        cu.code, cu.name, cu.contactPerson || '', cu.phone || '', cu.email || '',
-        cu.tempRequirement || '', cu.contractExpiry || '', cu.isActive ? 'Active' : 'Inactive',
-      ]);
-      XLSX.utils.book_append_sheet(wb, buildSheet('Customers', custHeaders, custData, [10, 20, 18, 14, 22, 12, 15, 10]), 'Customers');
-
-      // ── 5. Products ───────────────────────────────────────────
-      const prodHeaders = ['Code', 'Name', 'Category', 'Customer', 'Ctns/Pallet', 'Weight', 'UOM'];
-      const prodData = store.products.map(p => {
-        const cu = store.customers.find(c => c.id === p.customerId);
-        return [p.code, p.name, p.category, cu?.name || '', p.cartonsPerPallet, p.weightPerCarton, p.uom];
-      });
-      XLSX.utils.book_append_sheet(wb, buildSheet('Products', prodHeaders, prodData, [12, 24, 14, 18, 12, 10, 8]), 'Products');
-
-      // ── 6. Drivers ────────────────────────────────────────────
-      const drvHeaders = ['Code', 'Name', 'CNIC', 'Phone', 'License No', 'License Expiry', 'Status'];
-      const drvData = store.drivers.map(d => [d.code, d.name, d.cnic, d.phone, d.licenseNo, d.licenseExpiry, d.status]);
-      XLSX.utils.book_append_sheet(wb, buildSheet('Drivers', drvHeaders, drvData, [10, 20, 16, 14, 16, 15, 10]), 'Drivers');
-
-      // ── 7. Vehicles ───────────────────────────────────────────
-      const vehHeaders = ['Vehicle No', 'Type', 'Ownership', 'Route Permit Expiry', 'Token Expiry', 'Fitness Expiry', 'Insurance Expiry', 'Status'];
-      const vehData = store.vehicles.map(v => [
-        v.vehicleNo, v.type, v.ownership,
-        v.routePermitExpiry || '', v.tokenExpiry || '',
-        v.fitnessExpiry || '', v.insuranceExpiry || '', v.status,
-      ]);
-      XLSX.utils.book_append_sheet(wb, buildSheet('Vehicles', vehHeaders, vehData, [14, 14, 12, 20, 14, 14, 17, 10]), 'Vehicles');
-
-      // ── 8. Temperature Log ────────────────────────────────────
-      const tempHeaders = ['Date / Time', 'Room', 'Temperature (°C)', 'Recorded By', 'Notes'];
-      const tempData = store.temperatures.map(t => [
-        new Date(t.recordedAt||t.time||"").toLocaleString('en-PK', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
-        t.room, t.temperature, t.recordedBy, t.notes || '',
-      ]);
-      XLSX.utils.book_append_sheet(wb, buildSheet('Temperature Log', tempHeaders, tempData, [22, 12, 18, 18, 24]), 'Temperature Log');
-
-      // ── 9. Summary ────────────────────────────────────────────
+      const sheets: string[] = [];
       const activePallets = store.pallets.filter(p => p.status === 'active');
+
+      sheets.push(buildSheet('Active Inventory', ['IGP No', 'Customer', 'Product', 'Code', 'Qty', 'Weight', 'Total Wt (Kg)', 'Pack Type', 'Room', 'Location', 'Mfg Date', 'Expiry Date', 'Date In'],
+        activePallets.map(p => [
+          p.igpNumber, p.customerName, p.productName, p.productCode,
+          p.cartons, p.weightPerCarton, p.totalWeight, p.packingType || 'Carton',
+          p.room, p.room === 'Ante Room' ? 'Floor' : `${p.side}${p.row}-${p.slot}`,
+          formatDate(p.mfgDate), formatDate(p.expiryDate), formatDate(p.dateIn),
+        ]), [10, 16, 22, 10, 6, 8, 13, 10, 10, 12, 12, 13, 13]));
+
+      const inMoves = store.movements.filter(m => m.type === 'IN');
+      sheets.push(buildSheet('Stock IN History', ['IGP No', 'Date', 'Customer', 'Product', 'Qty', 'Total Wt (Kg)', 'Vehicle', 'Driver', 'Operator'],
+        inMoves.map(m => [
+          m.docNumber, formatDate((m as any).createdAt || m.date), m.customerName, m.productName,
+          m.cartons, m.totalWeight, m.vehicleNo || '', m.driverName || '', m.operatorName || '',
+        ]), [10, 12, 16, 22, 8, 13, 14, 16, 14]));
+
+      const outMoves = store.movements.filter(m => m.type === 'OUT');
+      sheets.push(buildSheet('Stock OUT History', ['OGP No', 'Date', 'Customer', 'Product', 'Qty', 'Total Wt (Kg)', 'Vehicle', 'Driver', 'Destination', 'Operator'],
+        outMoves.map(m => [
+          m.docNumber, formatDate((m as any).createdAt || m.date), m.customerName, m.productName,
+          m.cartons, m.totalWeight, m.vehicleNo || '', m.driverName || '', m.destination || '', m.operatorName || '',
+        ]), [10, 12, 16, 22, 8, 13, 14, 16, 18, 14]));
+
+      sheets.push(buildSheet('Customers', ['Code', 'Name', 'Contact Person', 'Phone', 'Email', 'Temp Req.', 'Contract Expiry', 'Status'],
+        store.customers.map(cu => [cu.code, cu.name, cu.contactPerson || '', cu.phone || '', cu.email || '', cu.tempRequirement || '', formatDate(cu.contractExpiry), cu.isActive ? 'Active' : 'Inactive']),
+        [10, 20, 18, 14, 22, 12, 15, 10]));
+
+      sheets.push(buildSheet('Products', ['Code', 'Name', 'Category', 'Customer', 'Ctns/Pallet', 'Weight', 'UOM'],
+        store.products.map(p => {
+          const cu = store.customers.find(c => c.id === p.customerId);
+          return [p.code, p.name, p.category, cu?.name || '', p.cartonsPerPallet, p.weightPerCarton, p.uom];
+        }), [12, 24, 14, 18, 12, 10, 8]));
+
+      sheets.push(buildSheet('Drivers', ['Code', 'Name', 'CNIC', 'Phone', 'License No', 'License Expiry', 'Status'],
+        store.drivers.map(d => [d.code, d.name, d.cnic, d.phone, d.licenseNo, formatDate(d.licenseExpiry), d.status]),
+        [10, 20, 16, 14, 16, 15, 10]));
+
+      sheets.push(buildSheet('Vehicles', ['Vehicle No', 'Type', 'Ownership', 'Route Permit Expiry', 'Token Expiry', 'Fitness Expiry', 'Insurance Expiry', 'Status'],
+        store.vehicles.map(v => [v.vehicleNo, v.type, v.ownership, formatDate(v.routePermitExpiry), formatDate(v.tokenExpiry), formatDate(v.fitnessExpiry), formatDate(v.insuranceExpiry), v.status]),
+        [14, 14, 12, 20, 14, 14, 17, 10]));
+
+      sheets.push(buildSheet('Temperature Log', ['Date / Time', 'Room', 'Temperature (C)', 'Recorded By', 'Notes'],
+        store.temperatures.map(t => [formatDateTime(t.recordedAt || t.time), t.room, t.temperature, t.recordedBy, t.notes || '']),
+        [22, 12, 18, 18, 24]));
+
       const totalWt = activePallets.reduce((s, p) => s + Number(p.totalWeight), 0);
-      const wsSummary: any = {};
+      sheets.push(buildSheet('Summary', ['Metric', 'Value'], [
+        ['Total Active Pallets', activePallets.length],
+        ['Total Weight in Storage (Kg)', parseFloat(Number(totalWt).toFixed(0))],
+        ['Total Customers (Active)', store.customers.filter(c => c.isActive).length],
+        ['Total Products', store.products.length],
+        ['Total Stock Movements', store.movements.length],
+        ['Last Backup', dateStr],
+      ], [32, 18]));
 
-      // Title
-      wsSummary['A1'] = titleCell('PAKFROST (PVT) LIMITED — Summary Report');
-      wsSummary['B1'] = cell('', 's', COL.navy);
-      wsSummary['C1'] = cell('', 's', COL.navy);
-      wsSummary['A2'] = subCell(`Generated: ${dateStr}`);
-      wsSummary['B2'] = cell('', 's', COL.navyMid);
-      wsSummary['C2'] = cell('', 's', COL.navyMid);
-      wsSummary['A3'] = cell('', 's', COL.white, COL.dark);
+      sheets.push(buildSheet('Customer Summary', ['Customer', 'Active Pallets', 'Total Qty', 'Total Kg'],
+        store.customers.filter(cu => cu.isActive).map(cu => {
+          const cp = activePallets.filter(p => p.customerId === cu.id);
+          return [cu.name, cp.length, cp.reduce((s, p) => s + Number(p.cartons), 0), parseFloat(cp.reduce((s, p) => s + Number(p.totalWeight), 0).toFixed(0))];
+        }), [24, 14, 12, 12]));
 
-      // KPI rows
-      const kpiRows = [
-        ['Total Active Pallets',          activePallets.length],
-        ['Total Weight in Storage (Kg)',  parseFloat(Number(totalWt).toFixed(0))],
-        ['Total Customers (Active)',       store.customers.filter(c => c.isActive).length],
-        ['Total Products',                 store.products.length],
-        ['Total Stock Movements',          store.movements.length],
-        ['Last Backup',                    dateStr],
-      ];
-      kpiRows.forEach((row, ri) => {
-        wsSummary[XLSX.utils.encode_cell({ r: 3 + ri, c: 0 })] = summLabel(String(row[0]));
-        wsSummary[XLSX.utils.encode_cell({ r: 3 + ri, c: 1 })] = summValue(row[1]);
-        wsSummary[XLSX.utils.encode_cell({ r: 3 + ri, c: 2 })] = cell('', 's', COL.white, COL.dark);
-      });
+      const workbook = `<?xml version="1.0" encoding="UTF-8"?>
+        <?mso-application progid="Excel.Sheet"?>
+        <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+          xmlns:o="urn:schemas-microsoft-com:office:office"
+          xmlns:x="urn:schemas-microsoft-com:office:excel"
+          xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+          <Styles>
+            <Style ss:ID="Title"><Font ss:Bold="1" ss:Size="14" ss:Color="#FFFFFF"/><Interior ss:Color="#0C3547" ss:Pattern="Solid"/></Style>
+            <Style ss:ID="Subtitle"><Font ss:Color="#FFFFFF"/><Interior ss:Color="#1A5276" ss:Pattern="Solid"/></Style>
+            <Style ss:ID="Header"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#2471A3" ss:Pattern="Solid"/></Style>
+            <Style ss:ID="Data"><Font ss:Color="#1B2631"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D6EAF8"/></Borders></Style>
+            <Style ss:ID="DataAlt"><Font ss:Color="#1B2631"/><Interior ss:Color="#EBF5FB" ss:Pattern="Solid"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#D6EAF8"/></Borders></Style>
+          </Styles>
+          ${sheets.join('')}
+        </Workbook>`;
 
-      // Spacer
-      const summSpacerR = 3 + kpiRows.length;
-      wsSummary[XLSX.utils.encode_cell({ r: summSpacerR, c: 0 })] = cell('', 's', COL.white, COL.dark);
-
-      // Customer table
-      const custTblStart = summSpacerR + 1;
-      ['Customer', 'Active Pallets', 'Total Qty', 'Total Kg'].forEach((h, ci) => {
-        wsSummary[XLSX.utils.encode_cell({ r: custTblStart, c: ci })] = hdrCell(h);
-      });
-      store.customers.filter(cu => cu.isActive).forEach((cu, ri) => {
-        const cp = activePallets.filter(p => p.customerId === cu.id);
-        const rowData = [cu.name, cp.length, cp.reduce((s, p) => s + Number(p.cartons), 0), parseFloat(cp.reduce((s, p) => s + Number(p.totalWeight), 0).toFixed(0))];
-        rowData.forEach((v, ci) => {
-          wsSummary[XLSX.utils.encode_cell({ r: custTblStart + 1 + ri, c: ci })] = dataCell(v, ri % 2 === 0);
-        });
-      });
-
-      const summLastR = custTblStart + 1 + store.customers.filter(cu => cu.isActive).length;
-      wsSummary['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: summLastR, c: 3 } });
-      wsSummary['!merges'] = [
-        { s: { r: 0, c: 0 }, e: { r: 0, c: 2 } },
-        { s: { r: 1, c: 0 }, e: { r: 1, c: 2 } },
-      ];
-      wsSummary['!cols'] = [{ wch: 32 }, { wch: 16 }, { wch: 14 }, { wch: 14 }];
-      XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
-
-      XLSX.writeFile(wb, `PAKFROST_WMS_Backup_${new Date().toISOString().slice(0, 10)}.xlsx`, { cellStyles: true });
+      const blob = new Blob([workbook], { type: 'application/vnd.ms-excel;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `PAKFROST_WMS_Backup_${new Date().toISOString().slice(0, 10)}.xls`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Backup error:', err);
       alert('Backup failed. Please try again.');
     }
   }, [store]);
-
   // Show loading screen while auth is checking saved session
   if (authLoading || store.isLoading) {
     return (
@@ -311,6 +228,8 @@ function AppContent() {
             drivers={store.drivers}
             vehicles={store.vehicles}
             counters={store.counters}
+            peekNextIGP={store.peekNextIGP}
+            peekNextOGP={store.peekNextOGP}
             onInitCounters={store.initializeCounters}
             onResetAllData={store.resetAllData}
             onNavigate={navigate}
@@ -344,7 +263,6 @@ function AppContent() {
             vehicles={store.vehicles}
             counters={store.counters}
             onStockOut={store.stockOut}
-            onNextOGP={store.nextOGP}
             peekNextOGP={store.peekNextOGP}
             getFIFOPallets={store.getFIFOPallets}
             currentUserName={currentUser.name}

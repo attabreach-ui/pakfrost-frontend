@@ -74,6 +74,7 @@ const cardStyle  = { background: 'var(--bg-card)', border: '1px solid #E2E8F0', 
 const Req        = () => <span style={{ color: '#0284C7' }}> *</span>;
 
 const fmtDate = (iso: string | undefined | null) => iso ? new Date(iso).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+const vehicleTypeLabel = (type: Vehicle['type']) => type.replace('_', ' ');
 
 export default function StockInPage({
   pallets, customers, products, drivers, vehicles,
@@ -705,7 +706,7 @@ ${buildCopy(3)}
                 <select value={header.vehicleNo} onChange={e => setHeader(p => ({ ...p, vehicleNo: e.target.value }))} className={inputCls} style={inputStyle}>
                   <option value="">Select Vehicle</option>
                   {vehicles.filter(v => v.status === 'active').map(v => (
-                    <option key={v.id} value={v.vehicleNo}>{v.vehicleNo} ({v.type})</option>
+                    <option key={v.id} value={v.vehicleNo}>{v.vehicleNo} ({vehicleTypeLabel(v.type)})</option>
                   ))}
                   <option value="__other__">Other (type below)</option>
                 </select>

@@ -1,9 +1,8 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { verifyPassword } from '@/lib/crypto';
 import {
   Package, TrendingDown, TrendingUp, AlertTriangle,
-  CheckCircle, Settings2, BarChart3, Thermometer, Clock, Bell
+  CheckCircle, Settings2, BarChart3, Thermometer, Clock, Bell, Trash2
 } from 'lucide-react';
 import type { Pallet, StockMovement, Room, TemperatureReading, Customer, Driver, Vehicle, DocCounters, PageView } from '@/types';
 
@@ -18,8 +17,8 @@ interface DashboardPageProps {
   counters: DocCounters;
   peekNextIGP?: () => string;
   peekNextOGP?: () => string;
-  onInitCounters: (igpStart: number, ogpStart: number) => void;
-  onResetAllData: () => void;
+  onInitCounters: (igpStart: number, ogpStart: number) => Promise<void>;
+  onResetAllData: () => Promise<void>;
   onNavigate: (page: PageView) => void;
 }
 
@@ -28,7 +27,7 @@ export default function DashboardPage({
   peekNextIGP, peekNextOGP,
   onInitCounters, onResetAllData, onNavigate
 }: DashboardPageProps) {
-  const { currentUser } = useAuth();
+  const { currentUser, verifyPassword } = useAuth();
   const isAdmin = currentUser?.role === 'admin';
   const [showCounterModal,     setShowCounterModal]     = useState(false);
   const [showResetConfirm,     setShowResetConfirm]     = useState(false);
@@ -36,6 +35,9 @@ export default function DashboardPage({
   const [pendingAction,        setPendingAction]        = useState<'counters' | 'clear-data' | null>(null);
   const [adminPassword,        setAdminPassword]        = useState('');
   const [passwordError,        setPasswordError]        = useState('');
+  const [counterError,         setCounterError]         = useState('');
+  const [isVerifying,          setIsVerifying]          = useState(false);
+  const [isSavingCounters,     setIsSavingCounters]     = useState(false);
   const [igpStart, setIgpStart] = useState('');
   const [ogpStart, setOgpStart] = useState('');
 
@@ -117,10 +119,14 @@ export default function DashboardPage({
     return r ? r.temperature : null;
   };
 
+  const getErrorMessage = (err: unknown) =>
+    err instanceof Error ? err.message : 'Action failed. Please try again.';
+
   const requirePassword = (action: 'counters' | 'clear-data') => {
     if (!isAdmin) return;
     setAdminPassword('');
     setPasswordError('');
+    setCounterError('');
     setPendingAction(action);
     setShowPasswordModal(true);
   };
@@ -129,27 +135,61 @@ export default function DashboardPage({
   const openClearDataModal = () => requirePassword('clear-data');
 
   const verifyPasswordAndOpen = useCallback(async () => {
-    if (!currentUser?.password) return;
-    const ok = await verifyPassword(adminPassword, currentUser.password);
-    if (ok) {
+    if (!pendingAction || isVerifying) return;
+    if (!adminPassword.trim()) {
+      setPasswordError('Please enter your password.');
+      return;
+    }
+
+    setIsVerifying(true);
+    setPasswordError('');
+    try {
+      const result = await verifyPassword(adminPassword);
+      if (!result.ok) {
+        setPasswordError(result.error || 'Incorrect password. Please try again.');
+        return;
+      }
+
+      if (pendingAction === 'clear-data') {
+        await onResetAllData();
+      }
+
       setShowPasswordModal(false);
       setAdminPassword('');
       setPasswordError('');
-      if (pendingAction === 'counters')   setShowCounterModal(true);
-      if (pendingAction === 'clear-data') { onResetAllData(); }
+      if (pendingAction === 'counters') {
+        setIgpStart(String(counters.igpSeq ?? 0));
+        setOgpStart(String(counters.ogpSeq ?? 0));
+        setShowCounterModal(true);
+      }
       setPendingAction(null);
-    } else {
-      setPasswordError('Incorrect password. Please try again.');
+    } catch (err) {
+      setPasswordError(getErrorMessage(err));
+    } finally {
+      setIsVerifying(false);
     }
-  }, [adminPassword, currentUser, pendingAction, onResetAllData]);
+  }, [adminPassword, counters.igpSeq, counters.ogpSeq, isVerifying, onResetAllData, pendingAction, verifyPassword]);
 
-  const handleInitCounters = () => {
-    const i = parseInt(igpStart);
-    const o = parseInt(ogpStart);
-    if (isNaN(i) || i < 0 || isNaN(o) || o < 0) return;
-    onInitCounters(i, o);
-    setShowCounterModal(false);
-    setIgpStart(''); setOgpStart('');
+  const handleInitCounters = async () => {
+    const i = parseInt(igpStart, 10);
+    const o = parseInt(ogpStart, 10);
+    if (isNaN(i) || i < 0 || isNaN(o) || o < 0) {
+      setCounterError('Please enter valid zero or positive counter numbers.');
+      return;
+    }
+
+    setIsSavingCounters(true);
+    setCounterError('');
+    try {
+      await onInitCounters(i, o);
+      setShowCounterModal(false);
+      setIgpStart('');
+      setOgpStart('');
+    } catch (err) {
+      setCounterError(getErrorMessage(err));
+    } finally {
+      setIsSavingCounters(false);
+    }
   };
 
   const StatCard = ({ label, value, sub, icon: Icon, color, onClick }: any) => (
@@ -200,7 +240,7 @@ export default function DashboardPage({
             </button>}
             {isAdmin && <button onClick={openClearDataModal} className="text-xs font-medium"
               style={{ color: '#ef4444' }}>
-              🗑 Clear All Data
+              <Trash2 className="w-4 h-4 inline mr-1" /> Clear All Data
             </button>}
           </div>
         </div>
@@ -399,7 +439,7 @@ export default function DashboardPage({
                 type="password"
                 value={adminPassword}
                 onChange={e => { setAdminPassword(e.target.value); setPasswordError(''); }}
-                onKeyDown={e => e.key === 'Enter' && verifyPasswordAndOpen()}
+                onKeyDown={e => e.key === 'Enter' && !isVerifying && verifyPasswordAndOpen()}
                 className="w-full px-3 py-2 rounded-lg text-sm outline-none"
                 style={{ background: 'var(--bg-page)', border: passwordError ? '1px solid #ef4444' : '1px solid var(--border-default)' }}
                 placeholder="Enter password"
@@ -421,14 +461,18 @@ export default function DashboardPage({
             )}
             <div className="flex gap-3 mt-4">
               <button onClick={() => { setShowPasswordModal(false); setAdminPassword(''); setPasswordError(''); setPendingAction(null); }}
+                disabled={isVerifying}
                 className="flex-1 py-2.5 rounded-xl text-sm border"
                 style={{ borderColor: 'rgba(43,184,232,0.2)', color: 'var(--text-secondary)' }}>
                 Cancel
               </button>
               <button onClick={verifyPasswordAndOpen}
+                disabled={isVerifying}
                 className="flex-1 py-2.5 rounded-xl text-sm font-bold"
-                style={{ background: pendingAction === 'clear-data' ? '#ef4444' : 'linear-gradient(135deg, #0284C7, #0369A1)', color: '#fff' }}>
-                {pendingAction === 'clear-data' ? '🗑 Yes, Delete All Data' : 'Verify & Open'}
+                style={{ background: pendingAction === 'clear-data' ? '#ef4444' : 'linear-gradient(135deg, #0284C7, #0369A1)', color: '#fff', opacity: isVerifying ? 0.7 : 1 }}>
+                {isVerifying
+                  ? (pendingAction === 'clear-data' ? 'Deleting...' : 'Verifying...')
+                  : (pendingAction === 'clear-data' ? <><Trash2 className="w-4 h-4 inline mr-1" /> Yes, Delete All Data</> : 'Verify & Open')}
               </button>
             </div>
           </div>
@@ -447,7 +491,7 @@ export default function DashboardPage({
                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>Last IGP Number Used</label>
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">Last IGP No:</span>
-                  <input type="number" min="0" value={igpStart} onChange={e => setIgpStart(e.target.value)}
+                  <input type="number" min="0" value={igpStart} onChange={e => { setIgpStart(e.target.value); setCounterError(''); }}
                     className="flex-1 px-3 py-2 rounded-lg  text-sm outline-none"
                     style={{ background: 'var(--bg-page)', border: '1px solid var(--border-default)' }}
                     placeholder="e.g. 2847" />
@@ -458,7 +502,7 @@ export default function DashboardPage({
                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>Last OGP Number Used</label>
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">Last OGP No:</span>
-                  <input type="number" min="0" value={ogpStart} onChange={e => setOgpStart(e.target.value)}
+                  <input type="number" min="0" value={ogpStart} onChange={e => { setOgpStart(e.target.value); setCounterError(''); }}
                     className="flex-1 px-3 py-2 rounded-lg  text-sm outline-none"
                     style={{ background: 'var(--bg-page)', border: '1px solid var(--border-default)' }}
                     placeholder="e.g. 1923" />
@@ -468,16 +512,19 @@ export default function DashboardPage({
             </div>
             <div className="flex gap-3 mt-6">
               <button onClick={() => setShowCounterModal(false)}
+                disabled={isSavingCounters}
                 className="flex-1 py-2.5 rounded-xl text-sm border"
                 style={{ borderColor: 'rgba(43,184,232,0.2)', color: 'var(--text-secondary)' }}>
                 Cancel
               </button>
               <button onClick={handleInitCounters}
+                disabled={isSavingCounters}
                 className="flex-1 py-2.5 rounded-xl text-sm font-bold"
-                style={{ background: 'linear-gradient(135deg, #0284C7, #0369A1)', color: 'var(--bg-card)' }}>
-                <CheckCircle className="w-4 h-4 inline mr-1" /> Save & Activate
+                style={{ background: 'linear-gradient(135deg, #0284C7, #0369A1)', color: 'var(--bg-card)', opacity: isSavingCounters ? 0.7 : 1 }}>
+                <CheckCircle className="w-4 h-4 inline mr-1" /> {isSavingCounters ? 'Saving...' : 'Save & Activate'}
               </button>
             </div>
+            {counterError && <p className="text-xs mt-3 text-red-400">{counterError}</p>}
           </div>
         </div>
       )}

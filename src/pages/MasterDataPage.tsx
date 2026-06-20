@@ -3,6 +3,7 @@ import { Database, Plus, Pencil, Trash2, X, CheckCircle } from 'lucide-react';
 import type { Customer, Product, Driver, Vehicle, Room, Pallet } from '@/types';
 
 type TabType = 'customers' | 'products' | 'drivers' | 'vehicles' | 'rooms';
+const vehicleTypeLabel = (type: Vehicle['type']) => type.replace('_', ' ');
 
 interface MasterDataPageProps {
   customers: Customer[];
@@ -74,7 +75,7 @@ export default function MasterDataPage({
   const [customerForm, setCustomerForm] = useState({ name: '', code: '', contactPerson: '', phone: '', email: '', address: '', tempRequirement: '-18C to -22C', isActive: true });
   const [productForm, setProductForm] = useState({ name: '', code: '', customerId: '', category: '', cartonsPerPallet: 160, weightPerCarton: 10, uom: 'Kg' as 'Kg' | 'Lbs' });
   const [driverForm, setDriverForm] = useState({ name: '', code: '', cnic: '', phone: '', licenseNo: '', licenseExpiry: '', status: 'active' as 'active' | 'inactive' });
-  const [vehicleForm, setVehicleForm] = useState({ vehicleNo: '', type: 'Reefer Truck' as Vehicle['type'], ownership: 'own' as 'own' | 'external', status: 'active' as 'active' | 'inactive' });
+  const [vehicleForm, setVehicleForm] = useState({ vehicleNo: '', type: 'Reefer_Truck' as Vehicle['type'], ownership: 'own' as 'own' | 'external', status: 'active' as 'active' | 'inactive' });
 
   const tabs: { key: TabType; label: string; count: number }[] = [
     { key: 'customers', label: 'Customers', count: customers.length },
@@ -88,7 +89,7 @@ export default function MasterDataPage({
     setCustomerForm({ name: '', code: '', contactPerson: '', phone: '', email: '', address: '', tempRequirement: '-18C to -22C', isActive: true });
     setProductForm({ name: '', code: '', customerId: '', category: '', cartonsPerPallet: 160, weightPerCarton: 10, uom: 'Kg' });
     setDriverForm({ name: '', code: '', cnic: '', phone: '', licenseNo: '', licenseExpiry: '', status: 'active' });
-    setVehicleForm({ vehicleNo: '', type: 'Reefer Truck', ownership: 'own', status: 'active' });
+    setVehicleForm({ vehicleNo: '', type: 'Reefer_Truck', ownership: 'own', status: 'active' });
     setEditingId(null);
   };
 
@@ -222,7 +223,7 @@ export default function MasterDataPage({
                   <div><label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>Vehicle No *</label><input value={vehicleForm.vehicleNo} onChange={e => setVehicleForm(p => ({ ...p, vehicleNo: e.target.value }))} className={inputCls} style={inputStyle} /></div>
                   <div><label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>Type</label>
                     <select value={vehicleForm.type} onChange={e => setVehicleForm(p => ({ ...p, type: e.target.value as Vehicle['type'] }))} className={inputCls} style={inputStyle}>
-                      {['Reefer Truck', 'Container', 'Pickup', 'Van', 'Other'].map(t => <option key={t} value={t}>{t}</option>)}
+                      {(['Reefer_Truck', 'Container', 'Pickup', 'Van', 'Other'] as Vehicle['type'][]).map(t => <option key={t} value={t}>{vehicleTypeLabel(t)}</option>)}
                     </select>
                   </div>
                   <div><label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>Ownership</label>
@@ -311,7 +312,7 @@ export default function MasterDataPage({
               {vehicles.map(v => (
                 <tr key={v.id} style={{ borderTop: '1px solid rgba(43,184,232,0.05)' }}>
                   <td className="px-3 py-2 font-mono ">{v.vehicleNo}</td>
-                  <td className="px-3 py-2" style={{ color: 'var(--text-secondary)' }}>{v.type}</td>
+                  <td className="px-3 py-2" style={{ color: 'var(--text-secondary)' }}>{vehicleTypeLabel(v.type)}</td>
                   <td className="px-3 py-2"><span className="px-2 py-0.5 rounded text-xs capitalize" style={{ background: v.ownership === 'own' ? 'rgba(74,222,128,0.15)' : 'rgba(234,179,8,0.15)', color: v.ownership === 'own' ? '#4ade80' : '#eab308' }}>{v.ownership}</span></td>
                   <td className="px-3 py-2"><span className="px-2 py-0.5 rounded text-xs" style={{ background: v.status === 'active' ? 'rgba(74,222,128,0.15)' : 'rgba(239,68,68,0.15)', color: v.status === 'active' ? '#4ade80' : '#ef4444' }}>{v.status}</span></td>
                   <td className="px-3 py-2">

@@ -17,8 +17,7 @@ interface StockOutPageProps {
   drivers: Driver[];
   vehicles: Vehicle[];
   counters: DocCounters;
-  onStockOut: (ogp: string, palletId: string, cartonsOut: number, header: any) => Promise<void>;
-  onNextOGP: () => Promise<string>;
+  onStockOut: (items: { palletId: string; cartonsOut: number }[], header: any) => Promise<string>;
   peekNextOGP: () => string;
   getFIFOPallets: (customerId?: string, productId?: string) => Pallet[];
   currentUserName: string;
@@ -28,10 +27,11 @@ interface DispatchLine { id: string; pallet: Pallet; cartonsOut: number; }
 type Step = 'form' | 'sheet';
 
 const fmtDate = (iso: string | undefined | null) => iso ? new Date(iso).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+const vehicleTypeLabel = (type: Vehicle['type']) => type.replace('_', ' ');
 
 export default function StockOutPage({
   pallets, customers, products, drivers, vehicles, counters,
-  onStockOut, onNextOGP, peekNextOGP, getFIFOPallets, currentUserName,
+  onStockOut, peekNextOGP, getFIFOPallets, currentUserName,
 }: StockOutPageProps) {
   const [step, setStep] = useState<Step>('form');
   const [savedOGP, setSavedOGP] = useState('');
@@ -127,21 +127,21 @@ export default function StockOutPage({
     if (lines.length === 0) { setMsg({ text: 'Add at least one pallet', ok: false }); return; }
     if (!counters.ogpInitialized) { setMsg({ text: 'Initialize counters from Dashboard first', ok: false }); return; }
 
-    const ogp = await onNextOGP();
-    for (const l of lines) {
-      await onStockOut(ogp, l.pallet.id, l.cartonsOut, {
-        vehicleNo: resolvedVehicleNo,
-        driverId: header.driverId || undefined,
-        driverName: selectedDriver?.name,
-        destination: header.destination,
-        reason: header.reason,
-        notes: header.notes,
-        operatorName: currentUserName,
-        orderRef: header.orderRef || undefined,
-        tempCheck: header.tempCheck,
-        condition: 'Good',
-      });
-    }
+    const ogp = await onStockOut(lines.map(l => ({
+      palletId: l.pallet.id,
+      cartonsOut: l.cartonsOut,
+    })), {
+      vehicleNo: resolvedVehicleNo,
+      driverId: header.driverId || undefined,
+      driverName: selectedDriver?.name,
+      destination: header.destination,
+      reason: header.reason,
+      notes: header.notes,
+      operatorName: currentUserName,
+      orderRef: header.orderRef || undefined,
+      tempCheck: header.tempCheck,
+      condition: 'Good',
+    });
     setSavedOGP(ogp);
     const _cCode = customers.find(x => x.id === selectedCustomerId)?.code || '';
     setSavedHeader({ ...header, driverName: selectedDriver?.name || '', customerName: selectedCustomer?.name || '', selectedDriver, _custCode: _cCode });
@@ -151,7 +151,7 @@ export default function StockOutPage({
 
   const reset = () => {
     setStep('form');
-    setHeader({ vehicleNo: '', vehicleNoOther: '', driverId: '', destination: '', reason: 'Dispatch', notes: '', date: new Date().toISOString().split('T')[0], timeOut: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), tempCheck: '-20' });
+    setHeader({ vehicleNo: '', vehicleNoOther: '', driverId: '', destination: '', reason: 'Dispatch', notes: '', date: new Date().toISOString().split('T')[0], timeOut: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), tempCheck: '-20', orderRef: '' });
     setOtherVehicleText('');
     setSelectedCustomerId(''); setSelectedProductId('');
     setLines([]); setMsg(null);
@@ -463,7 +463,7 @@ ${buildCopy(3)}
               <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>Vehicle No<Req /></label>
               <select value={header.vehicleNo} onChange={e => setHeader(p => ({ ...p, vehicleNo: e.target.value }))} className={inputCls} style={inputStyle}>
                 <option value="">Select Vehicle</option>
-                {vehicles.filter(v => v.status === 'active').map(v => <option key={v.id} value={v.vehicleNo}>{v.vehicleNo} ({v.type})</option>)}
+                {vehicles.filter(v => v.status === 'active').map(v => <option key={v.id} value={v.vehicleNo}>{v.vehicleNo} ({vehicleTypeLabel(v.type)})</option>)}
                 <option value="__other__">Other</option>
               </select>
               {header.vehicleNo === '__other__' && (

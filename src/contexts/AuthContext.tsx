@@ -1,25 +1,22 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import { API_URL, setAccessToken } from '../api/client';
+import { authApi } from '@/api';
+import type { User as AppUser } from '@/types';
 
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 const WARN_BEFORE_MS = 5 * 60 * 1000;
 
-interface User {
-  id: string;
-  username: string;
-  name: string;
-  role: string;
-  avatar: string | null;
-  isActive: boolean;
-}
+type User = Omit<AppUser, 'avatar' | 'password'> & { avatar: string | null; password?: string };
 
 interface AuthContextType {
   currentUser: User | null;
   login: (username: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   logout: () => void;
   updateCurrentUser: (updates: Partial<User>) => void;
+  verifyPassword: (password: string) => Promise<{ ok: boolean; error?: string }>;
   sessionWarning: boolean;
   extendSession: () => void;
+  isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -28,6 +25,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try { const s = localStorage.getItem('pf_currentUser'); return s ? JSON.parse(s) : null; } catch { return null; }
   });
+  const [isLoading] = useState(false);
   const [sessionWarning, setSessionWarning] = useState(false);
   const lastActivityRef = useRef<number>(Date.now());
   const sessionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -49,6 +47,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     lastActivityRef.current = Date.now();
     setSessionWarning(false);
   }, []);
+
+  useEffect(() => {
+    window.addEventListener('auth:logout', logout);
+    return () => window.removeEventListener('auth:logout', logout);
+  }, [logout]);
 
   useEffect(() => {
     if (!currentUser) {
@@ -104,8 +107,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setCurrentUser(prev => prev ? { ...prev, ...updates } : null);
   }, []);
 
+  const verifyPassword = useCallback(async (password: string): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      await authApi.verifyPassword(password);
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: err?.message ?? 'Incorrect password' };
+    }
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ currentUser, login, logout, updateCurrentUser, sessionWarning, extendSession }}>
+    <AuthContext.Provider value={{ currentUser, login, logout, updateCurrentUser, verifyPassword, sessionWarning, extendSession, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

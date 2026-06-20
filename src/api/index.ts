@@ -12,6 +12,8 @@ export const authApi = {
     client.post('/auth/refresh', { refreshToken }) as Promise<any>,
   logout:  () => client.post('/auth/logout') as Promise<any>,
   me:      () => client.get('/auth/me')      as Promise<any>,
+  verifyPassword: (password: string) =>
+    client.post('/auth/verify-password', { password }) as Promise<any>,
 };
 
 // ── Users ───────────────────────────────────────────────────────────────────
@@ -69,11 +71,18 @@ export const vehiclesApi = {
 export const stockApi = {
   nextIGP:  () => client.get('/stock/next-igp')  as Promise<any>,
   nextOGP:  () => client.get('/stock/next-ogp')  as Promise<any>,
+  counters: () => client.get('/stock/counters')  as Promise<any>,
+  setCounters: (igpSeq: number, ogpSeq: number) =>
+    client.put('/stock/counters', { igpSeq, ogpSeq }) as Promise<any>,
   stockIn:  (data: any) => client.post('/stock/in',   data) as Promise<any>,
   stockOut: (data: any) => client.post('/stock/out',  data) as Promise<any>,
   move:     (data: any) => client.post('/stock/move', data) as Promise<any>,
   editIGP:  (number: string, data: any) => client.put(`/stock/igp/${number}`, data) as Promise<any>,
   editOGP:  (number: string, data: any) => client.put(`/stock/ogp/${number}`, data) as Promise<any>,
+};
+
+export const adminApi = {
+  resetData: () => client.post('/admin/reset-data') as Promise<any>,
 };
 
 // ── Pallets ─────────────────────────────────────────────────────────────────

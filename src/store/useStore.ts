@@ -4,12 +4,13 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import type {
   User, Customer, Driver, Vehicle, Product, Pallet,
-  StockMovement, TemperatureReading, Room, UserPermissions
+  StockMovement, TemperatureReading, Room, UserPermissions, DocCounters
 } from '@/types';
 import { ROLE_DEFAULTS } from '@/types';
 import {
   usersApi, customersApi, productsApi, driversApi, vehiclesApi,
   stockApi, palletsApi, movementsApi, temperatureApi,
+  adminApi,
 } from '@/api';
 import { subscribeRealtime, unsubscribeRealtime } from '@/lib/supabaseRealtime';
 
@@ -20,6 +21,16 @@ const DEFAULT_ROOMS: Room[] = [
   { id:'r4', name:'Room 4',    maxPallets:384, currentPallets:0, temperature:-20, status:'normal' },
   { id:'ar', name:'Ante Room', maxPallets:30,  currentPallets:0, temperature:0,   status:'normal', isAnteRoom:true },
 ];
+
+const currentYear = new Date().getFullYear();
+const DEFAULT_COUNTERS: DocCounters = {
+  igpYear: currentYear,
+  igpSeq: 0,
+  ogpYear: currentYear,
+  ogpSeq: 0,
+  igpInitialized: false,
+  ogpInitialized: false,
+};
 
 function getErrorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
@@ -34,7 +45,7 @@ function summarizeFailures(failures: { name: string; reason: unknown }[]): strin
   return `Could not sync ${endpointNames}. ${messages}`;
 }
 
-export function useStore(isLoggedIn = false) {
+export function useStore(isLoggedIn = false, canLoadUsers = false) {
   const [users,        setUsers]        = useState<User[]>([]);
   const [customers,    setCustomers]    = useState<Customer[]>([]);
   const [drivers,      setDrivers]      = useState<Driver[]>([]);
@@ -44,6 +55,7 @@ export function useStore(isLoggedIn = false) {
   const [movements,    setMovements]    = useState<StockMovement[]>([]);
   const [temperatures, setTemperatures] = useState<TemperatureReading[]>([]);
   const [rooms]                         = useState<Room[]>(DEFAULT_ROOMS);
+  const [counters,     setCounters]     = useState<DocCounters>(DEFAULT_COUNTERS);
   const [nextIGPNum,   setNextIGPNum]   = useState('IGP-0001');
   const [nextOGPNum,   setNextOGPNum]   = useState('OGP-0001');
   const [isLoading,    setIsLoading]    = useState(true);
@@ -55,8 +67,9 @@ export function useStore(isLoggedIn = false) {
     if (initial) setIsLoading(true);
     else setIsRefreshing(true);
     try {
+      if (!canLoadUsers) setUsers([]);
       const requests = [
-        { name: 'users',        promise: usersApi.getAll(),                    apply: (r: any) => setUsers(r.data ?? []) },
+        ...(canLoadUsers ? [{ name: 'users', promise: usersApi.getAll(), apply: (r: any) => setUsers(r.data ?? []) }] : []),
         { name: 'customers',    promise: customersApi.getAll(),                apply: (r: any) => setCustomers(r.data ?? []) },
         { name: 'products',     promise: productsApi.getAll(),                 apply: (r: any) => setProducts(r.data ?? []) },
         { name: 'drivers',      promise: driversApi.getAll(),                  apply: (r: any) => setDrivers(r.data ?? []) },
@@ -64,6 +77,11 @@ export function useStore(isLoggedIn = false) {
         { name: 'pallets',      promise: palletsApi.getAll(),                  apply: (r: any) => setPallets(r.data ?? []) },
         { name: 'movements',    promise: movementsApi.getAll({ limit: 500 }),  apply: (r: any) => setMovements(r.data?.data ?? r.data ?? []) },
         { name: 'temperature',  promise: temperatureApi.getAll({ limit: 100 }), apply: (r: any) => setTemperatures(r.data ?? []) },
+        { name: 'counters',     promise: stockApi.counters(),                   apply: (r: any) => {
+          setCounters({ ...DEFAULT_COUNTERS, ...(r.data ?? {}) });
+          if (r.data?.nextIGP) setNextIGPNum(r.data.nextIGP);
+          if (r.data?.nextOGP) setNextOGPNum(r.data.nextOGP);
+        } },
         { name: 'next IGP',     promise: stockApi.nextIGP(),                   apply: (r: any) => setNextIGPNum(r.data?.number ?? 'IGP-0001') },
         { name: 'next OGP',     promise: stockApi.nextOGP(),                   apply: (r: any) => setNextOGPNum(r.data?.number ?? 'OGP-0001') },
       ];
@@ -91,7 +109,7 @@ export function useStore(isLoggedIn = false) {
       if (initial) setIsLoading(false);
       else setIsRefreshing(false);
     }
-  }, []);
+  }, [canLoadUsers]);
 
   // ── Refresh helpers — BEFORE useEffect ───────────────────────────────────
   const refreshPallets = useCallback(async () => {
@@ -118,9 +136,11 @@ export function useStore(isLoggedIn = false) {
 
   const refreshCounters = useCallback(async () => {
     try {
-      const [igp, ogp]: any[] = await Promise.all([stockApi.nextIGP(), stockApi.nextOGP()]);
-      setNextIGPNum(igp.data?.number ?? 'IGP-0001');
-      setNextOGPNum(ogp.data?.number ?? 'OGP-0001');
+      const res: any = await stockApi.counters();
+      const data = res.data ?? {};
+      setCounters({ ...DEFAULT_COUNTERS, ...data });
+      setNextIGPNum(data.nextIGP ?? 'IGP-0001');
+      setNextOGPNum(data.nextOGP ?? 'OGP-0001');
       setSyncError(null);
     } catch (err) {
       setSyncError(`Could not refresh document counters. ${getErrorMessage(err)}`);
@@ -190,7 +210,14 @@ export function useStore(isLoggedIn = false) {
   const peekNextOGP      = useCallback(() => nextOGPNum, [nextOGPNum]);
   const nextIGP          = useCallback(async () => nextIGPNum, [nextIGPNum]);
   const nextOGP          = useCallback(async () => nextOGPNum, [nextOGPNum]);
-  const initializeCounters = useCallback(async () => { await refreshCounters(); }, [refreshCounters]);
+  const initializeCounters = useCallback(async (igpStart: number, ogpStart: number) => {
+    const res: any = await stockApi.setCounters(igpStart, ogpStart);
+    const data = res.data ?? {};
+    setCounters({ ...DEFAULT_COUNTERS, ...data });
+    setNextIGPNum(data.nextIGP ?? `IGP-${String(igpStart + 1).padStart(4, '0')}`);
+    setNextOGPNum(data.nextOGP ?? `OGP-${String(ogpStart + 1).padStart(4, '0')}`);
+    setSyncError(null);
+  }, []);
 
   const addUser = useCallback(async (data: Omit<User,'id'|'createdAt'>) => {
     const res: any = await usersApi.create({ ...data, password: (data as any).password });
@@ -262,9 +289,10 @@ export function useStore(isLoggedIn = false) {
     return res.data?.pallets ?? [];
   }, [refreshPallets, refreshMovements, refreshCounters]);
 
-  const stockOut = useCallback(async (_ogpNumber: string, palletId: string, cartonsOut: number, header: any) => {
-    await stockApi.stockOut({ header, items: [{ palletId, cartonsOut }] });
+  const stockOut = useCallback(async (items: { palletId: string; cartonsOut: number }[], header: any) => {
+    const res: any = await stockApi.stockOut({ header, items });
     await Promise.all([refreshPallets(), refreshMovements(), refreshCounters()]);
+    return res.data?.ogpNumber ?? '';
   }, [refreshPallets, refreshMovements, refreshCounters]);
 
   const movePallet = useCallback(async (
@@ -349,7 +377,19 @@ export function useStore(isLoggedIn = false) {
   }, [pallets, movements, vehicles, drivers]);
 
   const resetAllData = useCallback(async () => {
-    setPallets([]); setMovements([]); setTemperatures([]);
+    await adminApi.resetData();
+    setCustomers([]);
+    setDrivers([]);
+    setVehicles([]);
+    setProducts([]);
+    setPallets([]);
+    setMovements([]);
+    setTemperatures([]);
+    setCounters(DEFAULT_COUNTERS);
+    setNextIGPNum('IGP-0001');
+    setNextOGPNum('OGP-0001');
+    setLastSync(new Date());
+    setSyncError(null);
   }, []);
   const updatePallet = useCallback((id: string, updates: Partial<Pallet>) => {
     setPallets(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
@@ -362,7 +402,7 @@ export function useStore(isLoggedIn = false) {
     users, customers, drivers, vehicles, products,
     pallets, movements, temperatures,
     rooms: computedRooms,
-    counters: { igpSeq: 0, ogpSeq: 0, igpInitialized: true, ogpInitialized: true },
+    counters,
     peekNextIGP, peekNextOGP, nextIGP, nextOGP,
     initializeCounters,
     addUser, updateUser, deleteUser, updateUserPermissions,

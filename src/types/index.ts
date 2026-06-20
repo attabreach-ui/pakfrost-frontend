@@ -30,11 +30,11 @@ export const ROLE_DEFAULTS: Record<UserRole, UserPermissions> = {
 export interface User {
   id: string;
   username: string;
-  /** Stored as SHA-256 hex hash (64 chars). Legacy plaintext auto-upgraded on next login. */
-  password: string;
+  /** Only present while creating/updating a user. Login responses never include it. */
+  password?: string;
   name: string;
   role: UserRole;
-  avatar: string;
+  avatar: string | null;
   isActive: boolean;
   customPermissions?: Partial<UserPermissions>;
   createdAt: string;
@@ -68,7 +68,7 @@ export interface Driver {
 export interface Vehicle {
   id: string;
   vehicleNo: string;
-  type: 'Reefer Truck' | 'Container' | 'Pickup' | 'Van' | 'Other';
+  type: 'Reefer_Truck' | 'Container' | 'Pickup' | 'Van' | 'Other';
   ownership: 'own' | 'external';
   routePermitExpiry?: string;
   tokenExpiry?: string;
