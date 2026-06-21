@@ -396,6 +396,17 @@ export function useStore(isLoggedIn = false, canLoadUsers = false) {
   }, []);
   const updateRoom = useCallback((_id: string, _updates: any) => {}, []);
 
+  // H-FIX: History "View Gate Pass" needs full data even for dispatched pallets
+  // (the local `pallets` state only holds active-status pallets), so fetch fresh.
+  const fetchIGPDetail = useCallback(async (igpNumber: string) => {
+    const res: any = await movementsApi.getIGP(igpNumber);
+    return res.data;
+  }, []);
+  const fetchOGPDetail = useCallback(async (ogpNumber: string) => {
+    const res: any = await movementsApi.getOGP(ogpNumber);
+    return res.data;
+  }, []);
+
   return {
     isLoading, isRefreshing, lastSync, manualRefresh,
     syncError,
@@ -415,6 +426,7 @@ export function useStore(isLoggedIn = false, canLoadUsers = false) {
     addTemperature,
     getStats, getFIFOPallets, getPalletsByLocation,
     resetAllData,
+    fetchIGPDetail, fetchOGPDetail,
     ROLE_DEFAULTS,
   };
 }
