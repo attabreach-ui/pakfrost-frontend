@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { useStore } from '@/store/useStore';
 import Layout from '@/components/Layout';
+import PageTransition from '@/components/PageTransition';
 import LoginPage from '@/pages/LoginPage';
 import DashboardPage from '@/pages/DashboardPage';
 import StockInPage from '@/pages/StockInPage';
@@ -353,7 +354,9 @@ function AppContent() {
 
   return (
     <Layout currentPage={currentPage} onNavigate={navigate} permissions={perms} onBackup={handleBackup} isRefreshing={store.isRefreshing} lastSync={store.lastSync} onManualRefresh={store.manualRefresh} syncError={store.syncError}>
-      {renderPage()}
+      <PageTransition pageKey={currentPage}>
+        {renderPage()}
+      </PageTransition>
     </Layout>
   );
 }
@@ -365,5 +368,3 @@ export default function App() {
     </AuthProvider>
   );
 }
-
-
