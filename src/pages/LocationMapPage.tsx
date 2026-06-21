@@ -5,7 +5,7 @@ import SlotPicker, { getPositionsForSlot } from '@/components/SlotPicker';
 
 interface LocationMapPageProps {
   currentUserName: string;
-  onMovePallet: (palletId: string, newRoom: string, newSide: 'L' | 'R', newRow: string, newSlot: string, newPosition: number | undefined, movedBy: string) => { ok: boolean; error?: string };
+  onMovePallet: (palletId: string, newRoom: string, newSide: 'L' | 'R', newRow: string, newSlot: string, newPosition: number | undefined, movedBy: string) => Promise<{ ok: boolean; error?: string }>;
   pallets: Pallet[];
 }
 
@@ -54,10 +54,10 @@ export default function LocationMapPage({ pallets, currentUserName, onMovePallet
     setMoveTarget(pallet);
   };
 
-  const confirmMove = () => {
+  const confirmMove = async () => {
     if (!moveTarget || !moveNewLocation) return;
     // M2 FIX: movePallet now returns {ok, error} — show error if slot is occupied
-    const result = onMovePallet(
+    const result = await onMovePallet(
       moveTarget.id,
       moveNewLocation.room,
       moveNewLocation.room === 'Ante Room' ? 'L' : moveNewLocation.side,
