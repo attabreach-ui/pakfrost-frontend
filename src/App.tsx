@@ -331,6 +331,8 @@ function AppContent() {
             vehicles={store.vehicles}
             onEditIGP={store.editIGP}
             onEditOGP={store.editOGP}
+            onFetchIGPDetail={store.fetchIGPDetail}
+            onFetchOGPDetail={store.fetchOGPDetail}
           />
         );
       case 'user-access':
