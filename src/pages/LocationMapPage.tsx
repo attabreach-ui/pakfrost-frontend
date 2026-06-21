@@ -32,6 +32,7 @@ export default function LocationMapPage({ pallets, currentUserName, onMovePallet
   const [moveNewLocation, setMoveNewLocation] = useState<{ room: string; side: 'L'|'R'; row: string; slot: string; position: number } | null>(null);
   const [showSlotPicker,  setShowSlotPicker]  = useState(false);
   const [moveSuccess,     setMoveSuccess]     = useState(false);
+  const [isMoving,        setIsMoving]        = useState(false);
 
   const activePallets = useMemo(() => pallets.filter(p => p.status === 'active'), [pallets]);
 
@@ -51,27 +52,33 @@ export default function LocationMapPage({ pallets, currentUserName, onMovePallet
     setMoveNewLocation(null);
     setShowSlotPicker(false);
     setMoveSuccess(false);
+    setIsMoving(false);
     setMoveTarget(pallet);
   };
 
   const confirmMove = async () => {
-    if (!moveTarget || !moveNewLocation) return;
-    // M2 FIX: movePallet now returns {ok, error} — show error if slot is occupied
-    const result = await onMovePallet(
-      moveTarget.id,
-      moveNewLocation.room,
-      moveNewLocation.room === 'Ante Room' ? 'L' : moveNewLocation.side,
-      moveNewLocation.room === 'Ante Room' ? '' : moveNewLocation.row,
-      moveNewLocation.room === 'Ante Room' ? '' : moveNewLocation.slot,
-      moveNewLocation.room === 'Ante Room' ? undefined : moveNewLocation.position,
-      currentUserName,
-    );
-    if (!result.ok) {
-      alert(result.error || 'Move failed — slot may already be occupied.');
-      return;
+    if (!moveTarget || !moveNewLocation || isMoving) return;
+    setIsMoving(true);
+    try {
+      // M2 FIX: movePallet now returns {ok, error} — show error if slot is occupied
+      const result = await onMovePallet(
+        moveTarget.id,
+        moveNewLocation.room,
+        moveNewLocation.room === 'Ante Room' ? 'L' : moveNewLocation.side,
+        moveNewLocation.room === 'Ante Room' ? '' : moveNewLocation.row,
+        moveNewLocation.room === 'Ante Room' ? '' : moveNewLocation.slot,
+        moveNewLocation.room === 'Ante Room' ? undefined : moveNewLocation.position,
+        currentUserName,
+      );
+      if (!result.ok) {
+        alert(result.error || 'Move failed — slot may already be occupied.');
+        return;
+      }
+      setMoveSuccess(true);
+      setTimeout(() => { setMoveTarget(null); setSelectedSlot(null); }, 1200);
+    } finally {
+      setIsMoving(false);
     }
-    setMoveSuccess(true);
-    setTimeout(() => { setMoveTarget(null); setSelectedSlot(null); }, 1200);
   };
 
   const slotMatchesFilter = (status: string) => filter === 'all' || filter === status;
@@ -273,16 +280,17 @@ export default function LocationMapPage({ pallets, currentUserName, onMovePallet
                 {/* Action buttons */}
                 <div className="flex gap-3">
                   <button onClick={() => setMoveTarget(null)}
-                    className="flex-1 py-2.5 rounded-xl text-sm"
+                    disabled={isMoving}
+                    className="flex-1 py-2.5 rounded-xl text-sm disabled:opacity-40"
                     style={{ border: '1px solid #E2E8F0', color: 'var(--text-secondary)' }}>
                     Cancel
                   </button>
                   <button
                     onClick={confirmMove}
-                    disabled={!moveNewLocation}
+                    disabled={!moveNewLocation || isMoving}
                     className="flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-40"
                     style={{ background: 'linear-gradient(135deg, #0284C7, #0369A1)', color: 'var(--bg-card)' }}>
-                    <MoveRight className="w-4 h-4" /> Confirm Move
+                    <MoveRight className="w-4 h-4" /> {isMoving ? 'Moving...' : 'Confirm Move'}
                   </button>
                 </div>
               </>
