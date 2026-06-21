@@ -13,6 +13,8 @@ interface HistoryPageProps {
   vehicles: Vehicle[];
   onEditIGP?: (igpNumber: string, header: any, items: any[]) => void;
   onEditOGP?: (ogpNumber: string, header: any) => void;
+  onFetchIGPDetail?: (igpNumber: string) => Promise<any>;
+  onFetchOGPDetail?: (ogpNumber: string) => Promise<any>;
 }
 
 interface Driver { id: string; name: string; cnic?: string; phone?: string; }
@@ -24,7 +26,7 @@ function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString('en-PK', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
-export default function HistoryPage({ movements, pallets, customers, products, drivers, vehicles: _vehicles, onEditIGP, onEditOGP }: HistoryPageProps) {
+export default function HistoryPage({ movements, pallets, customers, products, drivers, vehicles: _vehicles, onEditIGP, onEditOGP, onFetchIGPDetail, onFetchOGPDetail }: HistoryPageProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('transactions');
   const [search, setSearch] = useState('');
   const [filterCustomer, setFilterCustomer] = useState('');
@@ -149,13 +151,85 @@ export default function HistoryPage({ movements, pallets, customers, products, d
     }
   };
 
-  const viewGatePass = (docNumber: string, type: 'IN' | 'OUT') => {
-    const html = buildGatePassHtml(docNumber, type);
-    if (!html) return;
+  // H-FIX: builds the SAME gate pass HTML as the live Stock IN/OUT print,
+  // using freshly-fetched data (works even after pallets are dispatched/moved,
+  // unlike the local `pallets`/`movements` state which only holds active pallets).
+  const buildGatePassHtmlFromDetail = (docNumber: string, type: 'IN' | 'OUT', detail: any) => {
+    const GP_STYLE = `*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;color:#000;font-size:11px}.page{width:210mm;min-height:297mm;padding:10mm 12mm;position:relative}.copy-label{position:absolute;top:6mm;right:12mm;font-size:10px;font-weight:bold;border:1px solid #000;padding:3px 0;width:170px;text-align:center;border-radius:3px}.header-row{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:8px}.company-name{font-size:15px;font-weight:900;letter-spacing:0.1em}.company-sub{font-size:9px;color:#444;margin-top:1px}.doc-title{font-size:13px;font-weight:900;margin-top:6px}.header-right{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0;margin-left:10px}.doc-no-box{border:2px solid #000;padding:5px 0;font-size:13px;font-weight:900;display:block;width:170px;text-align:center;letter-spacing:0.04em}.date-box{font-size:10px;margin-top:0;border:1px solid #000;padding:4px 0;display:block;width:170px;text-align:center}.info-section{border:1px solid #999;margin-bottom:8px}.info-row{display:grid;grid-template-columns:80px 1fr 80px 1fr;border-bottom:1px solid #ddd;font-size:10px}.info-row:last-child{border-bottom:0}.info-label{background:#f5f5f5;padding:4px 6px;font-weight:bold;border-right:1px solid #ddd}.info-val{padding:4px 6px;border-right:1px solid #ddd}table{width:100%;border-collapse:collapse;font-size:10px;margin-bottom:8px}th{background:#eee;border:1px solid #999;padding:4px 5px;font-size:9px;font-weight:bold}td{border:1px solid #bbb;padding:4px 5px;text-align:center}td.left{text-align:left}.total-row{background:#f5f5f5;font-weight:bold}.bottom-row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:6px}.bottom-field{display:flex;flex-direction:column;gap:2px}.bottom-label{font-size:9px;font-weight:bold}.field-box{border:1px solid #999;min-height:22px;padding:2px 6px}.remarks-row{display:flex;align-items:flex-start;gap:6px;margin-bottom:8px}.remarks-box{border:1px solid #999;flex:1;min-height:28px;padding:2px 6px}.sigs{display:grid;grid-template-columns:repeat(2,1fr);gap:30px;margin-top:10px;margin-bottom:8px}.sig-box{text-align:center}.sig-val{min-height:30px;border-bottom:1px solid #000;padding-bottom:2px;font-size:11px}.sig-label{font-size:9px;margin-top:3px}.note-box{font-size:8px;color:#555;border-top:1px solid #ccc;padding-top:5px;line-height:1.4}@media print{@page{size:A4 portrait;margin:0}body{margin:0}}`;
+
+    if (type === 'IN') {
+      const docPallets: any[] = detail.pallets || [];
+      if (docPallets.length === 0) return '';
+      const firstP = docPallets[0];
+      const firstM = (detail.movements || [])[0];
+      const h = {
+        vehicleNo: firstP.vehicleNo || '-', driverName: firstP.driverName || '-',
+        orderRef: firstP.orderRef || '', date: firstP.dateIn,
+        temperatureAtReceipt: firstP.temperatureAtReceipt, condition: firstP.condition || 'Good',
+        sealNumber: firstP.sealNumber, departureTime: firstP.departureTime, timeIn: firstP.timeIn || '',
+        remarks: firstP.notes || '', driverId: firstP.driverId,
+        customerId: firstP.customerId, customerName: firstP.customerName,
+        preparedBy: firstM?.operatorName || '',
+      };
+      const drv = drivers.find((d: any) => d.id === h.driverId);
+      const custRec = customers.find((x: any) => x.id === h.customerId);
+      const custDisplay = custRec ? `${custRec.name} (${custRec.code})` : (h.customerName || '-');
+
+      const buildCopy = (n: number) => `<div class="page" style="page-break-after:${n<3?'always':'avoid'}"><div class="copy-label">Copy ${n} of 3</div><div class="header-row"><div><div class="company-name">PAKFROST (PVT) LIMITED</div><div class="company-sub">2 Km Off Manga Raiwind Road, Behind Achha Foods, Lahore</div><div class="company-sub">info.pakfrost@gmail.com &nbsp;|&nbsp; Premium Temperature Controlled Warehousing | -18C to -22C</div><div class="doc-title">Inward Gate Pass</div></div><div class="header-right"><div class="doc-no-box">IGP No: ${docNumber}</div><div class="date-box"><b>Date:</b> ${h.date ? new Date(h.date).toLocaleDateString('en-PK',{day:'2-digit',month:'short',year:'numeric'}) : '-'}</div></div></div><div class="info-section"><div class="info-row"><span class="info-label">Order Ref:</span><span class="info-val">${h.orderRef||'-'}</span><span class="info-label">Vehicle No:</span><span class="info-val">${h.vehicleNo}</span></div><div class="info-row"><span class="info-label">Customer:</span><span class="info-val">${custDisplay}</span><span class="info-label">Driver Name:</span><span class="info-val">${h.driverName}</span></div><div class="info-row"><span class="info-label">Cell No:</span><span class="info-val">${drv?.phone||'-'}</span><span class="info-label">CNIC:</span><span class="info-val">${drv?.cnic||'-'}</span></div></div><table><thead><tr><th>Item No</th><th style="text-align:left">Description</th><th>Pack Type</th><th>Qty</th><th>Wt/Unit</th><th>Total Kg</th><th>Expiry Date</th></tr></thead><tbody>${(()=>{const grp:any={};docPallets.forEach(p=>{const k=p.productCode||p.productName;if(!grp[k])grp[k]={...p,cartons:0,totalWeight:0};grp[k].cartons+=Number(p.cartons);grp[k].totalWeight+=Number(p.totalWeight);});const rows=Object.values(grp);return rows.map((p:any,i:number)=>`<tr><td>${i+1}</td><td class="left">${p.productCode ? p.productCode+' '+p.productName : p.productName}</td><td>${p.packingType||'Carton'}</td><td><b>${p.cartons}</b></td><td>${Number(p.weightPerCarton)}</td><td><b>${p.totalWeight.toFixed(1)}</b></td><td>${formatDate(p.expiryDate)}</td></tr>`).join('')+Array.from({length:Math.max(0,6-rows.length)}).map(()=>'<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>').join('');})()}</tbody><tfoot><tr class="total-row"><td colspan="3" style="text-align:right">TOTALS:</td><td><b>${docPallets.reduce((s,p)=>s + Number(p.cartons),0)}</b></td><td>-</td><td><b>${docPallets.reduce((s,p)=>s + Number(p.totalWeight),0).toFixed(1)}</b></td><td></td></tr></tfoot></table><div class="bottom-row"><div class="bottom-field"><span class="bottom-label">Vehicle Temperature:</span><div class="field-box">${h.temperatureAtReceipt}°C</div></div><div class="bottom-field"><span class="bottom-label">Product Temperature:</span><div class="field-box"></div></div><div class="bottom-field"><span class="bottom-label">Stock Condition:</span><div class="field-box">${h.condition}</div></div></div><div class="bottom-row"><div class="bottom-field"><span class="bottom-label">Arrival Time:</span><div class="field-box">${h.timeIn||'-'}</div></div><div class="bottom-field"><span class="bottom-label">Departure Time:</span><div class="field-box">${h.departureTime||''}</div></div><div class="bottom-field"><span class="bottom-label">Seal No:</span><div class="field-box">${h.sealNumber||'-'}</div></div></div><div class="remarks-row"><span class="bottom-label">Remarks:</span><div class="remarks-box">${h.remarks||''}</div></div><div class="sigs"><div class="sig-box"><div class="sig-val">${h.preparedBy}</div><div class="sig-label">Prepared By</div></div><div class="sig-box"><div class="sig-val"></div><div class="sig-label">Approved By</div></div></div><div class="note-box"><b>Note:</b> The Client Is Solely Responsible For Compliance With Punjab Food Authority Regulations. As Per Warehouse Policy, Expired, Damaged, Opened, Loose, Market Return, Or Undated Stock Is Not Acceptable. We Follow Best Practices And Are Committed To Continuous Improvement In Food Safety Standards.</div></div>`;
+      return `<!DOCTYPE html><html><head><title>IGP - ${docNumber}</title><style>${GP_STYLE}</style></head><body>${buildCopy(1)}${buildCopy(2)}${buildCopy(3)}</body></html>`;
+    } else {
+      const docMoves: any[] = detail.movements || [];
+      if (docMoves.length === 0) return '';
+      const firstM = docMoves[0];
+      const h = {
+        vehicleNo: firstM.vehicleNo || '-', driverName: firstM.driverName || '-',
+        destination: firstM.destination || '-', reason: firstM.reason || 'Dispatch',
+        orderRef: firstM.orderRef || '', date: firstM.createdAt,
+        customerId: firstM.customerId, customerName: firstM.customerName,
+        vehicleTemp: firstM.vehicleTemp || '', condition: firstM.condition || 'Good',
+        remarks: firstM.notes || '', driverId: firstM.driverId,
+        preparedBy: firstM.operatorName || '',
+      };
+      const drv = drivers.find((d: any) => d.id === h.driverId);
+      const custRec = customers.find((x: any) => x.id === h.customerId);
+      const custDisplay = custRec ? `${custRec.name} (${custRec.code})` : (h.customerName || '-');
+      const totalC = docMoves.reduce((s,m)=>s + Number(m.cartons),0);
+      const totalW = docMoves.reduce((s,m)=>s + Number(m.totalWeight),0);
+
+      const buildCopy = (n: number) => `<div class="page" style="page-break-after:${n<3?'always':'avoid'}"><div class="copy-label">Copy ${n} of 3</div><div class="header-row"><div><div class="company-name">PAKFROST (PVT) LIMITED</div><div class="company-sub">2 Km Off Manga Raiwind Road, Behind Achha Foods, Lahore</div><div class="company-sub">info.pakfrost@gmail.com &nbsp;|&nbsp; Premium Temperature Controlled Warehousing | -18C to -22C</div><div class="doc-title">Outward Gate Pass</div></div><div class="header-right"><div class="doc-no-box">OGP No: ${docNumber}</div><div class="date-box"><b>Date:</b> ${h.date ? new Date(h.date).toLocaleDateString('en-PK',{day:'2-digit',month:'short',year:'numeric'}) : '-'}</div></div></div><div class="info-section"><div class="info-row"><span class="info-label">Order Ref:</span><span class="info-val">${h.orderRef||'-'}</span><span class="info-label">Vehicle No:</span><span class="info-val">${h.vehicleNo}</span></div><div class="info-row"><span class="info-label">Customer:</span><span class="info-val">${custDisplay}</span><span class="info-label">Driver Name:</span><span class="info-val">${h.driverName}</span></div><div class="info-row"><span class="info-label">Cell No:</span><span class="info-val">${drv?.phone||'-'}</span><span class="info-label">CNIC:</span><span class="info-val">${drv?.cnic||'-'}</span></div></div><table><thead><tr><th>Item No</th><th style="text-align:left">Description</th><th>Pack Type</th><th>Qty</th><th>Wt/Unit</th><th>Total Kg</th><th>Expiry Date</th></tr></thead><tbody>${(()=>{const grp:any={};docMoves.forEach(m=>{const k=m.productCode||m.productName;if(!grp[k])grp[k]={m,pallet:m.pallet,cartons:0,totalWeight:0};grp[k].cartons+=Number(m.cartons);grp[k].totalWeight+=Number(m.totalWeight);});const rows=Object.values(grp);return rows.map((g:any,i:number)=>{const wpc=g.pallet?.weightPerCarton ?? (g.cartons ? g.totalWeight/g.cartons : 0);const exp=g.pallet?.expiryDate ? new Date(g.pallet.expiryDate).toLocaleDateString('en-PK',{day:'2-digit',month:'short',year:'numeric'}) : '-';return `<tr><td>${i+1}</td><td class="left">${g.m.productCode ? g.m.productCode+' '+g.m.productName : g.m.productName}</td><td>Carton</td><td><b>${g.cartons}</b></td><td>${Number(wpc).toFixed(2)}</td><td><b>${g.totalWeight.toFixed(1)}</b></td><td>${exp}</td></tr>`;}).join('')+Array.from({length:Math.max(0,6-rows.length)}).map(()=>'<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>').join('');})()}</tbody><tfoot><tr class="total-row"><td colspan="3" style="text-align:right">TOTALS:</td><td><b>${totalC}</b></td><td>-</td><td><b>${totalW.toFixed(1)}</b></td><td></td></tr></tfoot></table><div class="bottom-row"><div class="bottom-field"><span class="bottom-label">Vehicle Temperature:</span><div class="field-box">${h.vehicleTemp ? (h.vehicleTemp.toString().includes('°') ? h.vehicleTemp : h.vehicleTemp+'°C') : '-'}</div></div><div class="bottom-field"><span class="bottom-label">Stock Condition:</span><div class="field-box">${h.condition||'Good'}</div></div><div class="bottom-field"><span class="bottom-label">Destination:</span><div class="field-box">${h.destination}</div></div></div><div class="bottom-row"><div class="bottom-field"><span class="bottom-label">Arrival Time:</span><div class="field-box"></div></div><div class="bottom-field"><span class="bottom-label">Departure Time:</span><div class="field-box">${h.date ? new Date(h.date).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : ''}</div></div><div class="bottom-field"><span class="bottom-label">Reason:</span><div class="field-box">${h.reason}</div></div></div><div class="remarks-row"><span class="bottom-label">Remarks:</span><div class="remarks-box">${h.remarks||''}</div></div><div class="sigs"><div class="sig-box"><div class="sig-val">${h.preparedBy}</div><div class="sig-label">Prepared By</div></div><div class="sig-box"><div class="sig-val"></div><div class="sig-label">Received By</div></div></div><div class="note-box"><b>Disclaimer:</b> Client Must Ensure That Vehicle Temperature Is At The Required Level Before Loading Begins. Once The Order Has Been Dispatched From The Pakfrost Warehouse, Pakfrost Will Not Be Held Responsible For Any Temperature Variations Or Degradation In Product Quality During Transit.</div></div>`;
+      return `<!DOCTYPE html><html><head><title>OGP - ${docNumber}</title><style>${GP_STYLE}</style></head><body>${buildCopy(1)}${buildCopy(2)}${buildCopy(3)}</body></html>`;
+    }
+  };
+
+  const viewGatePass = async (docNumber: string, type: 'IN' | 'OUT') => {
     const win = window.open('', '_blank');
     if (!win) return;
-    win.document.write(html);
+    win.document.write('<body style="font-family:Arial;padding:24px;color:#555">Loading gate pass…</body>');
     win.document.close();
+    try {
+      const fetchFn = type === 'IN' ? onFetchIGPDetail : onFetchOGPDetail;
+      let html = '';
+      if (fetchFn) {
+        const detail = await fetchFn(docNumber);
+        html = buildGatePassHtmlFromDetail(docNumber, type, detail);
+      } else {
+        // Fallback to old local-data builder if fetch function wasn't provided
+        html = buildGatePassHtml(docNumber, type);
+      }
+      if (!html) {
+        win.document.open();
+        win.document.write('<body style="font-family:Arial;padding:24px;color:#555">Gate pass not found.</body>');
+        win.document.close();
+        return;
+      }
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+    } catch (err) {
+      win.document.open();
+      win.document.write('<body style="font-family:Arial;padding:24px;color:#b91c1c">Could not load gate pass. Please try again.</body>');
+      win.document.close();
+    }
   };
 
   const printEditedGatePass = () => {
