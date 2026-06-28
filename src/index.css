@@ -1,0 +1,219 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* === LIGHT THEME === */
+  --bg-page:        #F1F5F9;
+  --bg-card:        #FFFFFF;
+  --bg-sidebar:     #FFFFFF;
+  --bg-input:       #F8FAFC;
+  --bg-hover:       #F1F5F9;
+  --bg-dark-input:  #F8FAFC;
+
+  --primary:        #0284C7;
+  --primary-light:  rgba(2,132,199,0.1);
+  --primary-border: rgba(2,132,199,0.25);
+  --primary-hover:  #0369A1;
+
+  --text-primary:   #0F172A;
+  --text-secondary: #64748B;
+  --text-muted:     #94A3B8;
+  --text-on-primary:#FFFFFF;
+
+  --border-default: #E2E8F0;
+  --border-strong:  #CBD5E1;
+
+  --color-danger:   #ef4444;
+  --color-warning:  #f59e0b;
+  --color-success:  #22c55e;
+  --color-info:     #0284C7;
+
+  --shadow-card:    0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-sidebar: 2px 0 12px rgba(0,0,0,0.08);
+}
+
+/* === DARK THEME === */
+[data-theme="dark"] {
+  --bg-page:        #0F172A;
+  --bg-card:        #1E293B;
+  --bg-sidebar:     #1E293B;
+  --bg-input:       #0F172A;
+  --bg-hover:       #334155;
+  --bg-dark-input:  #0F172A;
+
+  --primary:        #38BDF8;
+  --primary-light:  rgba(56,189,248,0.12);
+  --primary-border: rgba(56,189,248,0.3);
+  --primary-hover:  #7DD3FC;
+
+  --text-primary:   #F1F5F9;
+  --text-secondary: #94A3B8;
+  --text-muted:     #64748B;
+  --text-on-primary:#0F172A;
+
+  --border-default: #334155;
+  --border-strong:  #475569;
+
+  --color-danger:   #f87171;
+  --color-warning:  #fbbf24;
+  --color-success:  #4ade80;
+  --color-info:     #38BDF8;
+
+  --shadow-card:    0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-sidebar: 2px 0 12px rgba(0,0,0,0.4);
+}
+
+/* Smooth theme transition - only color properties, not transforms/animations */
+body, div, span, p, h1, h2, h3, h4, button, input, select, textarea, table, th, td, aside, nav, main {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.15s ease !important;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--bg-page);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--bg-page); }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* Input autofill fix */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0px 1000px var(--bg-input) inset;
+  -webkit-text-fill-color: var(--text-primary);
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* ── DARK MODE: Global element overrides ───────────────────────────── */
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background: var(--bg-input) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-default) !important;
+  color-scheme: dark;
+}
+
+[data-theme="dark"] option {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+/* White backgrounds that couldn't be caught by JS replacement */
+[data-theme="dark"] .bg-white {
+  background: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Table cells */
+[data-theme="dark"] table {
+  color: var(--text-primary);
+}
+[data-theme="dark"] th {
+  background: var(--bg-hover) !important;
+  color: var(--text-secondary) !important;
+  border-color: var(--border-default) !important;
+}
+[data-theme="dark"] td {
+  border-color: var(--border-default) !important;
+  color: var(--text-primary) !important;
+}
+[data-theme="dark"] tr:nth-child(even) td {
+  background: rgba(255,255,255,0.02) !important;
+}
+
+/* Print sheet — always white even in dark mode */
+[data-theme="dark"] .print-sheet,
+[data-theme="dark"] .print-sheet * {
+  background: white !important;
+  color: black !important;
+}
+
+/* PRINT STYLES — unchanged */
+@media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  html, body {
+    background: white !important;
+    color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+  .print\:hidden, aside, nav, button, [role="navigation"] {
+    display: none !important;
+  }
+  main {
+    width: 100% !important;
+    overflow: visible !important;
+  }
+  main > * { display: none !important; }
+  .print-sheet {
+    display: block !important;
+    width: 210mm !important;
+    min-height: 270mm !important;
+    margin: 0 auto !important;
+    padding: 12mm 15mm !important;
+    background: white !important;
+    color: black !important;
+    font-size: 10pt !important;
+    font-family: Arial, Helvetica, sans-serif !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+  .print-sheet, .print-sheet * {
+    color: black !important;
+    background: transparent !important;
+  }
+  .print-sheet table { width: 100% !important; border-collapse: collapse !important; }
+  .print-sheet th, .print-sheet td {
+    border: 1px solid #999 !important;
+    padding: 3pt 5pt !important;
+    font-size: 9pt !important;
+  }
+  .print-sheet th {
+    background: #f0f0f0 !important;
+    font-weight: bold !important;
+    text-align: left !important;
+  }
+  .page-break { page-break-before: always !important; }
+  .no-page-break { page-break-inside: avoid !important; }
+  @page { size: A4 portrait; margin: 10mm; }
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+    --radius: 0.5rem;
+  }
+}
