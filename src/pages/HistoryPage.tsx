@@ -58,9 +58,15 @@ export default function HistoryPage({
   const [editSaved, setEditSaved] = useState(false);
   const [editHeader, setEditHeader] = useState<any>({});
   const [editItems, setEditItems] = useState<any[]>([]);
+  const [editLines, setEditLines] = useState<any[]>([]);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [editSuccess, setEditSuccess] = useState('');
 
   const openEditIGP = (docNumber: string) => {
     setEditSaved(false);
+    setEditError('');
+    setEditSuccess('');
     const docPallets = pallets.filter(p => p.igpNumber === docNumber);
     if (docPallets.length === 0) return;
     const first = docPallets[0];
@@ -74,27 +80,36 @@ export default function HistoryPage({
       condition:            first.condition || 'Good',
       notes:                first.notes || '',
       orderRef:             first.orderRef || '',
-      departureTime:        first.departureTime || '',   // FIX: load departure time
-      timeIn:               first.timeIn || '',          // FIX: load arrival time
+      departureTime:        first.departureTime || '',
+      timeIn:               first.timeIn || '',
+      customerId:           first.customerId || '',
+      customerName:         first.customerName || '',
     });
     setEditItems(docPallets.map(p => ({
       palletId:       p.id,
-      productId:      p.productId || '',                 // FIX: load productId
+      productId:      p.productId || '',
       productName:    p.productName,
-      productCode:    p.productCode || '',               // FIX: load productCode
+      productCode:    p.productCode || '',
       cartons:        p.cartons,
       weightPerCarton: p.weightPerCarton,
       packingType:    p.packingType || 'Carton',
       mfgDate:        p.mfgDate || '',
       expiryDate:     p.expiryDate || '',
       batchNo:        p.batchNo || '',
-      lotNo:          p.lotNo || '',                     // FIX: load lotNo
+      lotNo:          p.lotNo || '',
+      room:           p.room || '',
+      side:           p.side || '',
+      row:            p.row || '',
+      slot:           p.slot || '',
+      position:       p.position ?? undefined,
     })));
     setEditDoc({ type: 'IN', docNumber });
   };
 
   const openEditOGP = (docNumber: string) => {
     setEditSaved(false);
+    setEditError('');
+    setEditSuccess('');
     const docMovements = movements.filter(m => m.docNumber === docNumber && m.type === 'OUT');
     if (docMovements.length === 0) return;
     const first = docMovements[0];
@@ -106,10 +121,11 @@ export default function HistoryPage({
       reason:      first.reason || 'Dispatch',
       notes:       first.notes || '',
       orderRef:    first.orderRef || '',
-      vehicleTemp: (first as any).vehicleTemp || (first as any).tempCheck || '', // FIX: load vehicle temp
-      condition:   (first as any).condition || 'Good',                           // FIX: load condition
+      vehicleTemp: (first as any).vehicleTemp || (first as any).tempCheck || '',
+      condition:   (first as any).condition || 'Good',
+      customerId:  first.customerId || '',
+      customerName: first.customerName || '',
     });
-    // FIX: load OGP lines so quantities can be edited
     setEditLines(docMovements.map(m => {
       const pal = pallets.find((p:any) => p.id === m.palletId);
       return {
@@ -126,20 +142,48 @@ export default function HistoryPage({
     setEditDoc({ type: 'OUT', docNumber });
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editDoc) return;
-    if (editDoc.type === 'IN' && onEditIGP) {
-      onEditIGP(editDoc.docNumber, editHeader, editItems);
-    } else if (editDoc.type === 'OUT' && onEditOGP) {
-      // FIX: pass editLines so OGP quantities + pallet cartons update correctly
-      const lines = editLines.map(l => ({
-        movementId: l.movementId,
-        palletId:   l.palletId,
-        newCartons: l.newCartons,
-      }));
-      onEditOGP(editDoc.docNumber, editHeader, lines);
+    setEditLoading(true);
+    setEditError('');
+    setEditSuccess('');
+    try {
+      if (editDoc.type === 'IN' && onEditIGP) {
+        const items = editItems.map(it => ({
+          palletId:        it.palletId,
+          productId:       it.productId,
+          productName:     it.productName,
+          productCode:     it.productCode,
+          cartons:         Number(it.cartons),
+          weightPerCarton: Number(it.weightPerCarton),
+          packingType:     it.packingType,
+          mfgDate:         it.mfgDate || undefined,
+          expiryDate:      it.expiryDate || undefined,
+          batchNo:         it.batchNo || undefined,
+          lotNo:           it.lotNo || undefined,
+        }));
+        await onEditIGP(editDoc.docNumber, editHeader, items);
+        setEditSuccess(`IGP ${editDoc.docNumber} updated successfully`);
+        setEditSaved(true);
+      } else if (editDoc.type === 'OUT' && onEditOGP) {
+        const lines = editLines.map(l => ({
+          movementId:     l.movementId,
+          palletId:       l.palletId,
+          newCartons:     Number(l.newCartons),
+          weightPerCarton: Number(l.weightPerCarton),
+          productId:      l.productId,
+          productName:    l.productName,
+          productCode:    l.productCode,
+        }));
+        await onEditOGP(editDoc.docNumber, editHeader, lines);
+        setEditSuccess(`OGP ${editDoc.docNumber} updated successfully`);
+        setEditSaved(true);
+      }
+    } catch (err: any) {
+      setEditError(err.message || 'Failed to save changes. Please try again.');
+    } finally {
+      setEditLoading(false);
     }
-    setEditSaved(true);
   };
 
 
@@ -265,7 +309,6 @@ export default function HistoryPage({
   const [ledgerCustomerId, setLedgerCustomerId] = useState('');
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 50;
-  const [editLines, setEditLines] = useState<any[]>([]);
 
   const filteredMovements = useMemo(() => {
     let m = [...movements];
@@ -819,6 +862,17 @@ export default function HistoryPage({
               <button onClick={() => setEditDoc(null)} className="p-2 rounded-lg" style={{ background: 'var(--bg-input)', color: 'var(--text-secondary)' }}><X className="w-4 h-4" /></button>
             </div>
             <div className="overflow-y-auto p-5 flex-1">
+              {/* Edit feedback messages */}
+              {editError && (
+                <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}>
+                  {editError}
+                </div>
+              )}
+              {editSuccess && (
+                <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.2)' }}>
+                  {editSuccess}
+                </div>
+              )}
               {/* Header fields */}
               <div className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--primary)' }}>Header Information</div>
               <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
@@ -828,11 +882,20 @@ export default function HistoryPage({
                     value={editHeader.vehicleNo || ''} onChange={e => setEditHeader((p:any) => ({ ...p, vehicleNo: e.target.value }))} />
                 </div>
                 <div>
-                  <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>Driver Name</label>
-                  <input className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: 'var(--bg-page)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
-                    value={editHeader.driverName || ''} onChange={e => setEditHeader((p:any) => ({ ...p, driverName: e.target.value }))} />
+                  <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>Driver</label>
+                  <select className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: 'var(--bg-page)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                    value={editHeader.driverId || ''} onChange={e => setEditHeader((p:any) => ({ ...p, driverId: e.target.value, driverName: drivers.find((d:any) => d.id === e.target.value)?.name || p.driverName }))}>
+                    <option value="">-- Select Driver --</option>
+                    {drivers.map((d:any) => <option key={d.id} value={d.id}>{d.name} ({d.code})</option>)}
+                  </select>
                 </div>
                 {editDoc.type === 'IN' && <>
+                  <div>
+                    <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>Customer</label>
+                    <div className="px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--bg-input)', color: 'var(--text-primary)', border: '1px solid var(--border-default)' }}>
+                      {editHeader.customerName || '-'}
+                    </div>
+                  </div>
                   <div>
                     <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>Seal No</label>
                     <input className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: 'var(--bg-page)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
@@ -876,6 +939,18 @@ export default function HistoryPage({
                     <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>Reason</label>
                     <input className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: 'var(--bg-page)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
                       value={editHeader.reason || ''} onChange={e => setEditHeader((p:any) => ({ ...p, reason: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>Vehicle Temperature (°C)</label>
+                    <input type="text" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: 'var(--bg-page)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                      value={editHeader.vehicleTemp || ''} onChange={e => setEditHeader((p:any) => ({ ...p, vehicleTemp: e.target.value }))} placeholder="-20" />
+                  </div>
+                  <div>
+                    <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>Stock Condition</label>
+                    <select className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: 'var(--bg-page)', border: '1px solid var(--border-default)', color: 'var(--text-primary)' }}
+                      value={editHeader.condition || 'Good'} onChange={e => setEditHeader((p:any) => ({ ...p, condition: e.target.value }))}>
+                      {['Good','Damaged','Partial'].map(c => <option key={c}>{c}</option>)}
+                    </select>
                   </div>
                 </>}
                 <div>
@@ -1013,11 +1088,15 @@ export default function HistoryPage({
               </>}
             </div>
             <div className="p-5 border-t flex gap-3 flex-wrap" style={{ borderColor: 'var(--border-default)' }}>
-              <button onClick={() => { setEditDoc(null); setEditSaved(false); }} className="flex-1 py-2.5 rounded-xl text-sm border" style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}>Close</button>
+              <button onClick={() => { setEditDoc(null); setEditSaved(false); setEditError(''); setEditSuccess(''); }} className="flex-1 py-2.5 rounded-xl text-sm border" style={{ borderColor: 'var(--border-default)', color: 'var(--text-secondary)' }}>Close</button>
               {!editSaved ? (
-                <button onClick={handleSaveEdit} className="flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+                <button onClick={handleSaveEdit} disabled={editLoading} className="flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50"
                   style={{ background: 'linear-gradient(135deg, #0284C7, #0369A1)', color: '#fff' }}>
-                  <Save className="w-4 h-4" /> Save Changes
+                  {editLoading ? (
+                    <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Saving...</>
+                  ) : (
+                    <><Save className="w-4 h-4" /> Save Changes</>
+                  )}
                 </button>
               ) : (
                 <button onClick={printEditedGatePass} className="flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
