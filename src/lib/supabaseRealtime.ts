@@ -1,17 +1,17 @@
 /**
  * Supabase Realtime — Live sync for PAKFROST WMS
  *
- * Jab bhi koi user pallets/movements/temperature mein change kare,
- * ye module automatically sab connected users ko update bhejta hai.
+ * Whenever any user makes changes to pallets/movements/temperature,
+ * this module automatically pushes updates to all connected users.
  *
- * Setup (ek baar karna hai):
+ * Setup (one-time):
  * Supabase Dashboard → Table Editor → pallets/stock_movements/temperature_readings
- * → Realtime toggle ON karo
+ * → Turn Realtime toggle ON
  */
 
 import { createClient } from '@supabase/supabase-js';
 
-// Supabase public config — ye secrets nahi hain, frontend pe safe hain
+// Supabase public config — these are not secrets, safe on frontend
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL  || 'https://ojupzuhotqohszqpigwx.supabase.co';
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
@@ -28,9 +28,9 @@ type RealtimeCallbacks = {
 let activeChannel: ReturnType<typeof supabase.channel> | null = null;
 
 /**
- * Supabase Realtime subscribe karo.
- * Jab bhi pallets/movements/temperature mein koi bhi change aaye,
- * callback call hoga — sab users ko foran pata chalega.
+ * Subscribe to Supabase Realtime.
+ * Whenever any change occurs in pallets/movements/temperature,
+ * the callback fires — all users are notified immediately.
  */
 export function subscribeRealtime(callbacks: RealtimeCallbacks) {
   if (!supabase) {
@@ -38,7 +38,7 @@ export function subscribeRealtime(callbacks: RealtimeCallbacks) {
     return null;
   }
 
-  // Pehle purana channel band karo
+  // Close previous channel first
   if (activeChannel) {
     supabase.removeChannel(activeChannel);
   }
@@ -62,7 +62,7 @@ export function subscribeRealtime(callbacks: RealtimeCallbacks) {
   return activeChannel;
 }
 
-/** Logout pe channel band karo */
+/** Unsubscribe channel on logout */
 export function unsubscribeRealtime() {
   if (activeChannel && supabase) {
     supabase.removeChannel(activeChannel);

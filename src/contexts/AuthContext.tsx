@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
-import { API_URL, setAccessToken } from '../api/client';
+import { setAccessToken } from '../api/client';
 import { authApi } from '@/api';
 import type { User as AppUser } from '@/types';
 
@@ -76,20 +76,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('click', resetActivity);
       if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
     };
-  }, [currentUser, sessionWarning, logout]);
+  }, [currentUser, logout]);
 
   const login = useCallback(async (
     username: string,
     password: string
   ): Promise<{ ok: boolean; error?: string }> => {
     try {
-      const res = await fetch(`${API_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
+      const data = await authApi.login(username, password);
+      if (!data.success) {
         return { ok: false, error: data.message ?? 'Invalid username or password' };
       }
       const { tokens, user } = data.data;
@@ -99,7 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       lastActivityRef.current = Date.now();
       return { ok: true };
     } catch (err: any) {
-      return { ok: false, error: 'Cannot connect to server. Is backend running?' };
+      return { ok: false, error: err.message || 'Cannot connect to server. Is backend running?' };
     }
   }, []);
 

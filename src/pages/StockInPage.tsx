@@ -300,63 +300,67 @@ export default function StockInPage({
 
   // ✅ Bug #1 + #3 — saveAll correctly passes position AND packingType
   const saveAll = async () => {
-    const resolvedVehicleNo = header.vehicleNo === '__other__' ? header.vehicleNoOther : header.vehicleNo;
-    if (!resolvedVehicleNo)  { setMsg({ text: '* Vehicle number is required', ok: false }); return; }
-    if (items.length === 0)  { setMsg({ text: 'Add at least one product',     ok: false }); return; }
-    if (!allAssigned)        { setMsg({ text: 'Assign all pallets in Stacking section first', ok: false }); return; }
-    if (!counters.igpInitialized) { setMsg({ text: 'Please initialize document counters from Dashboard first', ok: false }); return; }
+    try {
+      const resolvedVehicleNo = header.vehicleNo === '__other__' ? header.vehicleNoOther : header.vehicleNo;
+      if (!resolvedVehicleNo)  { setMsg({ text: '* Vehicle number is required', ok: false }); return; }
+      if (items.length === 0)  { setMsg({ text: 'Add at least one product',     ok: false }); return; }
+      if (!allAssigned)        { setMsg({ text: 'Assign all pallets in Stacking section first', ok: false }); return; }
+      if (!counters.igpInitialized) { setMsg({ text: 'Please initialize document counters from Dashboard first', ok: false }); return; }
 
-    // Build stock-in items from palletDefsMap
-    const stockInItems: any[] = [];
-    const savedPalletLines: SavedPalletLine[] = [];
+      // Build stock-in items from palletDefsMap
+      const stockInItems: any[] = [];
+      const savedPalletLines: SavedPalletLine[] = [];
 
-    items.forEach((item, idx) => {
-      const defs = palletDefsMap[idx] || [];
-      defs.forEach(def => {
-        stockInItems.push({
-          productId:      item.productId,
-          cartons:        def.qty,
-          weightPerCarton:item.weightPerCarton,
-          packingType:    item.packingType,        // ✅ Bug #3
-          mfgDate:        item.mfgDate || undefined,
-          expiryDate:     item.expiryDate,
-          batchNo:        item.batchNo || undefined,
-          lotNo:          item.lotNo   || undefined,
-          room:           def.room,
-          side:           def.side,
-          row:            def.row,
-          slot:           def.slot,
-          position:       def.position,             // ✅ Bug #1
-        });
-        savedPalletLines.push({
-          ...item,
-          cartons:    def.qty,
-          totalWeight: def.qty * item.weightPerCarton,
-          room: def.room, side: def.side, row: def.row, slot: def.slot,
-          position: def.position,
+      items.forEach((item, idx) => {
+        const defs = palletDefsMap[idx] || [];
+        defs.forEach(def => {
+          stockInItems.push({
+            productId:      item.productId,
+            cartons:        def.qty,
+            weightPerCarton:item.weightPerCarton,
+            packingType:    item.packingType,        // ✅ Bug #3
+            mfgDate:        item.mfgDate || undefined,
+            expiryDate:     item.expiryDate,
+            batchNo:        item.batchNo || undefined,
+            lotNo:          item.lotNo   || undefined,
+            room:           def.room,
+            side:           def.side,
+            row:            def.row,
+            slot:           def.slot,
+            position:       def.position,             // ✅ Bug #1
+          });
+          savedPalletLines.push({
+            ...item,
+            cartons:    def.qty,
+            totalWeight: def.qty * item.weightPerCarton,
+            room: def.room, side: def.side, row: def.row, slot: def.slot,
+            position: def.position,
+          });
         });
       });
-    });
 
-    const igp = await onNextIGP();
-    await onStockIn(igp, {
-      vehicleNo:            resolvedVehicleNo,
-      driverId:             header.driverId || undefined,
-      driverName:           selectedDriver?.name || resolvedVehicleNo,
-      sealNumber:           header.sealNumber || undefined,
-      temperatureAtReceipt: parseFloat(header.temperatureAtReceipt),
-      condition:            header.condition,
-      notes:                header.notes,
-      orderRef:             header.orderRef || undefined,
-      departureTime:        header.departureTime || undefined,
-      timeIn:               header.timeIn || undefined,  // FIX: pass arrival time so History reprint shows correctly
-      operatorName:         currentUserName,
-    }, stockInItems);
+      const igp = await onNextIGP();
+      await onStockIn(igp, {
+        vehicleNo:            resolvedVehicleNo,
+        driverId:             header.driverId || undefined,
+        driverName:           selectedDriver?.name || resolvedVehicleNo,
+        sealNumber:           header.sealNumber || undefined,
+        temperatureAtReceipt: parseFloat(header.temperatureAtReceipt),
+        condition:            header.condition,
+        notes:                header.notes,
+        orderRef:             header.orderRef || undefined,
+        departureTime:        header.departureTime || undefined,
+        timeIn:               header.timeIn || undefined,  // FIX: pass arrival time so History reprint shows correctly
+        operatorName:         currentUserName,
+      }, stockInItems);
 
-    setSavedIGP(igp);
-    setSavedHeader({ ...header, driverName: selectedDriver?.name || '', customerName: selectedCustomer?.name || '', selectedDriver });
-    setSavedItems(savedPalletLines);
-    setStep('sheet');
+      setSavedIGP(igp);
+      setSavedHeader({ ...header, driverName: selectedDriver?.name || '', customerName: selectedCustomer?.name || '', selectedDriver });
+      setSavedItems(savedPalletLines);
+      setStep('sheet');
+    } catch (err: any) {
+      setMsg({ text: err.message || 'Failed to save. Please try again.', ok: false });
+    }
   };
 
   const reset = () => {

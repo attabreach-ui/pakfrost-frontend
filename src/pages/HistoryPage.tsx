@@ -26,10 +26,16 @@ interface HistoryPageProps {
 interface Driver { id: string; name: string; cnic?: string; phone?: string; }
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' });
+  if (!iso) return '-';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '-';
+  return d.toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 function formatDateTime(iso: string) {
-  return new Date(iso).toLocaleString('en-PK', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  if (!iso) return '-';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '-';
+  return d.toLocaleString('en-PK', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
 export default function HistoryPage({
@@ -324,6 +330,7 @@ export default function HistoryPage({
         }
       } catch (err: any) {
         setUndoError(err.message || 'Could not check document status');
+        return; // Don't open modal if status check fails
       }
     }
     setUndoModal({ type, docNumber, action, statusInfo });
@@ -642,7 +649,7 @@ export default function HistoryPage({
                       });
                     })()}
                     {paginatedMovements.length === 0 && (
-                      <tr><td colSpan={10} className="text-center py-10 text-sm" style={{ color: 'var(--text-secondary)' }}>No records found</td></tr>
+                      <tr><td colSpan={11} className="text-center py-10 text-sm" style={{ color: 'var(--text-secondary)' }}>No records found</td></tr>
                     )}
                   </tbody>
                 </table>

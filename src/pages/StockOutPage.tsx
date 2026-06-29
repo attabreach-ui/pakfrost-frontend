@@ -122,31 +122,35 @@ export default function StockOutPage({
   };
 
   const save = async () => {
-    const resolvedVehicleNo = header.vehicleNo === '__other__' ? header.vehicleNoOther : header.vehicleNo;
-    if (!resolvedVehicleNo) { setMsg({ text: '* Vehicle number required', ok: false }); return; }
-    if (lines.length === 0) { setMsg({ text: 'Add at least one pallet', ok: false }); return; }
-    if (!counters.ogpInitialized) { setMsg({ text: 'Initialize counters from Dashboard first', ok: false }); return; }
+    try {
+      const resolvedVehicleNo = header.vehicleNo === '__other__' ? header.vehicleNoOther : header.vehicleNo;
+      if (!resolvedVehicleNo) { setMsg({ text: '* Vehicle number required', ok: false }); return; }
+      if (lines.length === 0) { setMsg({ text: 'Add at least one pallet', ok: false }); return; }
+      if (!counters.ogpInitialized) { setMsg({ text: 'Initialize counters from Dashboard first', ok: false }); return; }
 
-    const ogp = await onStockOut(lines.map(l => ({
-      palletId: l.pallet.id,
-      cartonsOut: l.cartonsOut,
-    })), {
-      vehicleNo: resolvedVehicleNo,
-      driverId: header.driverId || undefined,
-      driverName: selectedDriver?.name,
-      destination: header.destination,
-      reason: header.reason,
-      notes: header.notes,
-      operatorName: currentUserName,
-      orderRef: header.orderRef || undefined,
-      tempCheck: header.tempCheck,
-      condition: 'Good',
-    });
-    setSavedOGP(ogp);
-    const _cCode = customers.find(x => x.id === selectedCustomerId)?.code || '';
-    setSavedHeader({ ...header, driverName: selectedDriver?.name || '', customerName: selectedCustomer?.name || '', selectedDriver, _custCode: _cCode });
-    setSavedLines([...lines]);
-    setStep('sheet');
+      const ogp = await onStockOut(lines.map(l => ({
+        palletId: l.pallet.id,
+        cartonsOut: l.cartonsOut,
+      })), {
+        vehicleNo: resolvedVehicleNo,
+        driverId: header.driverId || undefined,
+        driverName: selectedDriver?.name,
+        destination: header.destination,
+        reason: header.reason,
+        notes: header.notes,
+        operatorName: currentUserName,
+        orderRef: header.orderRef || undefined,
+        tempCheck: header.tempCheck,
+        condition: 'Good',
+      });
+      setSavedOGP(ogp);
+      const _cCode = customers.find(x => x.id === selectedCustomerId)?.code || '';
+      setSavedHeader({ ...header, driverName: selectedDriver?.name || '', customerName: selectedCustomer?.name || '', selectedDriver, _custCode: _cCode });
+      setSavedLines([...lines]);
+      setStep('sheet');
+    } catch (err: any) {
+      setMsg({ text: err.message || 'Failed to save. Please try again.', ok: false });
+    }
   };
 
   const reset = () => {

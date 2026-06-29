@@ -202,8 +202,11 @@ export function useStore(isLoggedIn = false, canLoadUsers = false) {
 
   const manualRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    await pollVolatile();
-    setIsRefreshing(false);
+    try {
+      await pollVolatile();
+    } finally {
+      setIsRefreshing(false);
+    }
   }, [pollVolatile]);
 
   const peekNextIGP      = useCallback(() => nextIGPNum, [nextIGPNum]);
@@ -285,13 +288,18 @@ export function useStore(isLoggedIn = false, canLoadUsers = false) {
 
   const stockIn = useCallback(async (_igpNumber: string, header: any, items: any[]) => {
     const res: any = await stockApi.stockIn({ header, items });
-    await Promise.all([refreshPallets(), refreshMovements(), refreshCounters()]);
+    // Refresh in background — don't mask success if refresh fails
+    Promise.all([refreshPallets(), refreshMovements(), refreshCounters()]).catch(err => {
+      console.warn('Refresh after stockIn failed:', err);
+    });
     return res.data?.pallets ?? [];
   }, [refreshPallets, refreshMovements, refreshCounters]);
 
   const stockOut = useCallback(async (items: { palletId: string; cartonsOut: number }[], header: any) => {
     const res: any = await stockApi.stockOut({ header, items });
-    await Promise.all([refreshPallets(), refreshMovements(), refreshCounters()]);
+    Promise.all([refreshPallets(), refreshMovements(), refreshCounters()]).catch(err => {
+      console.warn('Refresh after stockOut failed:', err);
+    });
     return res.data?.ogpNumber ?? '';
   }, [refreshPallets, refreshMovements, refreshCounters]);
 
@@ -301,40 +309,52 @@ export function useStore(isLoggedIn = false, canLoadUsers = false) {
   ): Promise<{ ok: boolean; error?: string }> => {
     try {
       await stockApi.move({ palletId, newRoom, newSide, newRow, newSlot, newPosition, movedBy });
-      await refreshPallets();
+      refreshPallets().catch(() => {});
       return { ok: true };
     } catch (err: any) { return { ok: false, error: err.message }; }
   }, [refreshPallets]);
 
   const editIGP = useCallback(async (igpNumber: string, header: any, items: any[]) => {
     await stockApi.editIGP(igpNumber, { header, items });
-    await Promise.all([refreshPallets(), refreshMovements()]);
+    Promise.all([refreshPallets(), refreshMovements()]).catch(err => {
+      console.warn('Refresh after editIGP failed:', err);
+    });
   }, [refreshPallets, refreshMovements]);
 
   const editOGP = useCallback(async (ogpNumber: string, header: any, lines?: any[]) => {
     await stockApi.editOGP(ogpNumber, { header, lines });
-    await Promise.all([refreshPallets(), refreshMovements()]);
+    Promise.all([refreshPallets(), refreshMovements()]).catch(err => {
+      console.warn('Refresh after editOGP failed:', err);
+    });
   }, [refreshPallets, refreshMovements]);
 
   const voidIGP = useCallback(async (igpNumber: string, reason: string) => {
     await stockApi.voidIGP(igpNumber, reason);
-    await Promise.all([refreshPallets(), refreshMovements()]);
-  }, [refreshPallets, refreshMovements]);
+    Promise.all([refreshPallets(), refreshMovements(), refreshCounters()]).catch(err => {
+      console.warn('Refresh after voidIGP failed:', err);
+    });
+  }, [refreshPallets, refreshMovements, refreshCounters]);
 
   const restoreIGP = useCallback(async (igpNumber: string) => {
     await stockApi.restoreIGP(igpNumber);
-    await Promise.all([refreshPallets(), refreshMovements()]);
-  }, [refreshPallets, refreshMovements]);
+    Promise.all([refreshPallets(), refreshMovements(), refreshCounters()]).catch(err => {
+      console.warn('Refresh after restoreIGP failed:', err);
+    });
+  }, [refreshPallets, refreshMovements, refreshCounters]);
 
   const voidOGP = useCallback(async (ogpNumber: string, reason: string) => {
     await stockApi.voidOGP(ogpNumber, reason);
-    await Promise.all([refreshPallets(), refreshMovements()]);
-  }, [refreshPallets, refreshMovements]);
+    Promise.all([refreshPallets(), refreshMovements(), refreshCounters()]).catch(err => {
+      console.warn('Refresh after voidOGP failed:', err);
+    });
+  }, [refreshPallets, refreshMovements, refreshCounters]);
 
   const restoreOGP = useCallback(async (ogpNumber: string) => {
     await stockApi.restoreOGP(ogpNumber);
-    await Promise.all([refreshPallets(), refreshMovements()]);
-  }, [refreshPallets, refreshMovements]);
+    Promise.all([refreshPallets(), refreshMovements(), refreshCounters()]).catch(err => {
+      console.warn('Refresh after restoreOGP failed:', err);
+    });
+  }, [refreshPallets, refreshMovements, refreshCounters]);
 
   const getDocStatus = useCallback(async (docNumber: string, type: 'IN' | 'OUT') => {
     const res: any = await stockApi.docStatus(docNumber, type);

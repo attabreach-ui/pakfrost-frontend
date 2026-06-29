@@ -14,7 +14,7 @@ export const API_URL = configuredApiUrl === 'https://pakfrost-backend.vercel.app
   : configuredApiUrl || RENDER_API_URL;
 
 // ── Token storage (in-memory for security) ─────────────────────────────────
-// Page refresh ke baad localStorage se accessToken restore karo
+// Restore accessToken from localStorage after page refresh
 let _accessToken: string | null = localStorage.getItem('pf_accessToken');
 
 export function setAccessToken(token: string | null) {

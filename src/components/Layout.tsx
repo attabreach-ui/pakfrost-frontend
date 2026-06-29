@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, ArrowDownLeft, ArrowUpRight, Grid3X3, RefreshCw,
@@ -38,37 +38,32 @@ interface LayoutProps {
   syncError?: string | null;
 }
 
-export default function Layout({
-  currentPage, onNavigate, permissions, onBackup,
-  children, isRefreshing, lastSync, onManualRefresh, syncError,
-}: LayoutProps) {
-  const { currentUser, logout, sessionWarning, extendSession } = useAuth();
-  const { isDark, toggle: toggleTheme } = useTheme();
+interface SidebarContentProps {
+  collapsed: boolean;
+  isMobile: boolean;
+  visibleItems: NavItem[];
+  currentPage: PageView;
+  onNavigate: (page: PageView) => void;
+  currentUser: any;
+  isDark: boolean;
+  toggleTheme: () => void;
+  isRefreshing?: boolean;
+  lastSync?: Date | null;
+  onManualRefresh?: () => void;
+  onBackup?: () => void;
+  logout: () => void;
+  setMobileOpen: (v: boolean) => void;
+  setDesktopCollapsed: (v: boolean) => void;
+  desktopCollapsed: boolean;
+}
 
-  const [isMobile,          setIsMobile]          = useState(() => window.innerWidth < 640);
-  const [desktopCollapsed,  setDesktopCollapsed]  = useState(false);
-  const [mobileOpen,        setMobileOpen]        = useState(false);
-
-  useEffect(() => {
-    const check = () => {
-      const mobile = window.innerWidth < 640;
-      setIsMobile(mobile);
-      if (!mobile) setMobileOpen(false);
-    };
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
-  }, []);
-
-  const visibleItems = NAV_ITEMS.filter(i => !i.permKey || permissions[i.permKey]);
-  const collapsed    = isMobile ? false : desktopCollapsed;
-
-  function navigate(page: PageView) {
-    onNavigate(page);
-    if (isMobile) setMobileOpen(false);
-  }
-
-  // ── Sidebar content (shared between desktop & mobile drawer) ──────────────
-  const SidebarContent = () => (
+// SidebarContent is a STABLE module-level component — never re-created on parent re-render
+function SidebarContent({
+  collapsed, isMobile, visibleItems, currentPage, onNavigate,
+  currentUser, isDark, toggleTheme, isRefreshing, lastSync,
+  onManualRefresh, onBackup, logout, setMobileOpen, setDesktopCollapsed, desktopCollapsed,
+}: SidebarContentProps) {
+  return (
     <>
       {/* Logo row */}
       <div
@@ -136,7 +131,7 @@ export default function Layout({
           return (
             <motion.button
               key={item.key}
-              onClick={() => navigate(item.key)}
+              onClick={() => onNavigate(item.key)}
               className="w-full flex items-center gap-3 text-sm font-medium relative group"
               style={{
                 padding:        collapsed ? '10px 0' : '10px 14px',
@@ -151,7 +146,7 @@ export default function Layout({
               whileTap={{ scale: 0.97 }}
               transition={{ type: 'spring', stiffness: 400, damping: 25 }}
             >
-              {/* Sliding active background (layoutId makes it animate between items) */}
+              {/* Sliding active background */}
               {isActive && (
                 <motion.div
                   layoutId="nav-active-bg"
@@ -165,7 +160,7 @@ export default function Layout({
                 />
               )}
 
-              {/* Hover highlight (only when not active) */}
+              {/* Hover highlight */}
               {!isActive && (
                 <motion.div
                   className="absolute inset-0"
@@ -182,14 +177,10 @@ export default function Layout({
 
               <Icon
                 className="w-4 h-4 flex-shrink-0 relative"
-                style={{
-                  zIndex: 1,
-                  color: isActive ? 'var(--bg-card)' : undefined,
-                }}
+                style={{ zIndex: 1, color: isActive ? 'var(--bg-card)' : undefined }}
               />
               {!collapsed && (
-                <span
-                  className="whitespace-nowrap text-xs font-semibold tracking-wide relative"
+                <span className="whitespace-nowrap text-xs font-semibold tracking-wide relative"
                   style={{ zIndex: 1, color: isActive ? 'var(--bg-card)' : undefined }}
                 >
                   {item.label}
@@ -198,8 +189,7 @@ export default function Layout({
 
               {/* Desktop collapsed tooltip */}
               {collapsed && (
-                <div
-                  className="absolute left-full ml-3 px-2.5 py-1.5 rounded-lg text-xs z-50 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity font-semibold"
+                <div className="absolute left-full ml-3 px-2.5 py-1.5 rounded-lg text-xs z-50 whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity font-semibold"
                   style={{ background: 'var(--text-primary)', color: 'var(--bg-card)', boxShadow: 'var(--shadow-card)' }}
                 >
                   {item.label}
@@ -216,7 +206,6 @@ export default function Layout({
       {/* User + action buttons */}
       <div className="p-3 flex-shrink-0">
         <div className="flex items-center gap-2.5" style={{ justifyContent: collapsed ? 'center' : 'flex-start' }}>
-          {/* Avatar */}
           <motion.div
             className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm"
             style={{ background: 'linear-gradient(135deg,#0284C7,#38BDF8)', color: 'white', minWidth: 32 }}
@@ -233,7 +222,6 @@ export default function Layout({
                 <div className="capitalize font-medium" style={{ fontSize: '9px', color: 'var(--primary)', letterSpacing: '0.08em' }}>{currentUser?.role}</div>
               </div>
               <div className="flex gap-1">
-                {/* Sync */}
                 <motion.button
                   onClick={onManualRefresh}
                   title={lastSync ? `Last sync: ${lastSync.toLocaleTimeString('en-PK',{hour:'2-digit',minute:'2-digit'})}` : 'Sync data'}
@@ -244,7 +232,6 @@ export default function Layout({
                 >
                   <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
                 </motion.button>
-                {/* Backup */}
                 <motion.button
                   onClick={onBackup} title="Backup"
                   className="p-1.5 rounded-lg"
@@ -254,7 +241,6 @@ export default function Layout({
                 >
                   <Download className="w-4 h-4" />
                 </motion.button>
-                {/* Logout */}
                 <motion.button
                   onClick={logout} title="Logout"
                   className="p-1.5 rounded-lg"
@@ -269,7 +255,7 @@ export default function Layout({
           )}
         </div>
 
-        {/* Collapsed-mode action buttons (vertical stack) */}
+        {/* Collapsed-mode action buttons */}
         {collapsed && (
           <div className="flex flex-col gap-1 mt-2">
             <motion.button onClick={onManualRefresh} title="Sync" className="w-full flex items-center justify-center p-1.5 rounded-lg" style={{ color: isRefreshing ? '#4ade80' : 'var(--text-muted)' }} whileHover={{ color: '#4ade80', background: 'rgba(74,222,128,0.08)' }} whileTap={{ scale: 0.9 }}>
@@ -305,8 +291,45 @@ export default function Layout({
       )}
     </>
   );
+}
 
-  // ── Main render ──────────────────────────────────────────────────────────
+export default function Layout({
+  currentPage, onNavigate, permissions, onBackup,
+  children, isRefreshing, lastSync, onManualRefresh, syncError,
+}: LayoutProps) {
+  const { currentUser, logout, sessionWarning, extendSession } = useAuth();
+  const { isDark, toggle: toggleTheme } = useTheme();
+
+  const [isMobile,          setIsMobile]          = useState(() => window.innerWidth < 640);
+  const [desktopCollapsed,  setDesktopCollapsed]  = useState(false);
+  const [mobileOpen,        setMobileOpen]        = useState(false);
+
+  useEffect(() => {
+    const check = () => {
+      const mobile = window.innerWidth < 640;
+      setIsMobile(mobile);
+      if (!mobile) setMobileOpen(false);
+    };
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
+  const visibleItems = useMemo(() => NAV_ITEMS.filter(i => !i.permKey || permissions[i.permKey]), [permissions]);
+  const collapsed    = isMobile ? false : desktopCollapsed;
+
+  const handleNavigate = useMemo(() => (page: PageView) => {
+    onNavigate(page);
+    if (isMobile) setMobileOpen(false);
+  }, [onNavigate, isMobile]);
+
+  const sidebarProps = useMemo<SidebarContentProps>(() => ({
+    collapsed, isMobile, visibleItems, currentPage,
+    onNavigate: handleNavigate,
+    currentUser, isDark, toggleTheme,
+    isRefreshing, lastSync, onManualRefresh, onBackup, logout,
+    setMobileOpen, setDesktopCollapsed, desktopCollapsed,
+  }), [collapsed, isMobile, visibleItems, currentPage, handleNavigate, currentUser, isDark, toggleTheme, isRefreshing, lastSync, onManualRefresh, onBackup, logout, desktopCollapsed]);
+
   return (
     <>
       {/* Session timeout warning */}
@@ -354,7 +377,7 @@ export default function Layout({
 
       <div className="flex h-screen overflow-hidden" style={{ background: 'var(--bg-page)' }}>
 
-        {/* ── DESKTOP SIDEBAR — spring-animated width ── */}
+        {/* ── DESKTOP SIDEBAR ── */}
         {!isMobile && (
           <motion.aside
             className="relative flex flex-col flex-shrink-0 print:hidden"
@@ -367,16 +390,15 @@ export default function Layout({
             animate={{ width: desktopCollapsed ? 64 : 240 }}
             transition={{ type: 'spring', stiffness: 280, damping: 28 }}
           >
-            <SidebarContent />
+            <SidebarContent {...sidebarProps} />
           </motion.aside>
         )}
 
-        {/* ── MOBILE DRAWER — backdrop + slide-in ── */}
+        {/* ── MOBILE DRAWER ── */}
         {isMobile && (
           <AnimatePresence>
             {mobileOpen && (
               <>
-                {/* Blurred backdrop */}
                 <motion.div
                   className="fixed inset-0 z-40 print:hidden"
                   style={{ background: 'rgba(0,0,0,0.48)', backdropFilter: 'blur(2px)' }}
@@ -386,7 +408,6 @@ export default function Layout({
                   transition={{ duration: 0.22 }}
                   onClick={() => setMobileOpen(false)}
                 />
-                {/* Drawer panel */}
                 <motion.aside
                   className="fixed top-0 left-0 h-full z-50 flex flex-col print:hidden"
                   style={{
@@ -400,7 +421,7 @@ export default function Layout({
                   exit={{   x: -260 }}
                   transition={{ type: 'spring', stiffness: 300, damping: 28 }}
                 >
-                  <SidebarContent />
+                  <SidebarContent {...sidebarProps} />
                 </motion.aside>
               </>
             )}
@@ -412,8 +433,7 @@ export default function Layout({
 
           {/* Mobile top bar */}
           {isMobile && (
-            <div
-              className="flex items-center gap-3 px-4 py-3 flex-shrink-0 print:hidden"
+            <div className="flex items-center gap-3 px-4 py-3 flex-shrink-0 print:hidden"
               style={{ background: 'var(--bg-sidebar)', borderBottom: '1px solid var(--border-default)', minHeight: '56px' }}
             >
               <motion.button

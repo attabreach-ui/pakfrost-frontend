@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -34,18 +34,29 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [failCount, setFailCount] = useState(0);
   const [isLocked,  setIsLocked]  = useState(false);
 
-  // Lock after 5 failed attempts for 30 seconds
+  const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearLock = () => {
+    setIsLocked(false);
+    setFailCount(0);
+    setError('');
+    if (lockTimerRef.current) { clearTimeout(lockTimerRef.current); lockTimerRef.current = null; }
+  };
+
+  // Progressive lock: 5 fails → 30s, 10 → 5min, 15+ → 15min
   useEffect(() => {
     if (failCount >= 5) {
       setIsLocked(true);
-      setError('Too many failed attempts. Please wait 30 seconds.');
-      const t = setTimeout(() => { setIsLocked(false); setFailCount(0); setError(''); }, 30000);
-      return () => clearTimeout(t);
+      const duration = failCount >= 15 ? 900_000 : failCount >= 10 ? 300_000 : 30_000;
+      setError(`Too many failed attempts. Please wait ${Math.ceil(duration / 1000)} seconds.`);
+      if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
+      lockTimerRef.current = setTimeout(clearLock, duration);
     }
+    return () => { if (lockTimerRef.current) clearTimeout(lockTimerRef.current); };
   }, [failCount]);
 
   const handleLogin = async () => {
-    if (isLocked) return;
+    if (isLocked) { setError('Account is locked. Please wait before trying again.'); return; }
     if (!username || !password) { setError('Please enter username and password'); return; }
     setLoading(true); setError('');
     const result = await login(username, password);
