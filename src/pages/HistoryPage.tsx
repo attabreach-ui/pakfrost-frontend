@@ -351,7 +351,7 @@ export default function HistoryPage({
   } | null>(null);
   const [undoReason, setUndoReason] = useState('');
   const [undoError, setUndoError] = useState('');
-  const [undoLoading, setUndoLoading] = useState(false);
+  const [undoSuccess, setUndoSuccess] = useState('');
 
   const isDocVoided = useCallback((docNumber: string, type: 'IN' | 'OUT') => {
     const docMoves = movements.filter(m => m.docNumber === docNumber && m.type === type);
@@ -360,6 +360,7 @@ export default function HistoryPage({
 
   const openUndoModal = async (docNumber: string, type: 'IN' | 'OUT', action: 'void' | 'restore') => {
     setUndoError('');
+    setUndoSuccess('');
     setUndoReason('');
     let statusInfo: DocStatusInfo | undefined;
     if (onGetDocStatus) {
@@ -383,6 +384,7 @@ export default function HistoryPage({
     if (!undoModal) return;
     setUndoLoading(true);
     setUndoError('');
+    setUndoSuccess('');
     try {
       if (undoModal.action === 'void') {
         if (!undoReason.trim() || undoReason.trim().length < 3) {
@@ -392,12 +394,18 @@ export default function HistoryPage({
         }
         if (undoModal.type === 'IN' && onVoidIGP) await onVoidIGP(undoModal.docNumber, undoReason.trim());
         else if (undoModal.type === 'OUT' && onVoidOGP) await onVoidOGP(undoModal.docNumber, undoReason.trim());
+        setUndoSuccess(`${undoModal.type === 'IN' ? 'IGP' : 'OGP'} ${undoModal.docNumber} has been undone successfully.`);
       } else {
         if (undoModal.type === 'IN' && onRestoreIGP) await onRestoreIGP(undoModal.docNumber);
         else if (undoModal.type === 'OUT' && onRestoreOGP) await onRestoreOGP(undoModal.docNumber);
+        setUndoSuccess(`${undoModal.type === 'IN' ? 'IGP' : 'OGP'} ${undoModal.docNumber} has been restored successfully.`);
       }
-      setUndoModal(null);
-      setUndoReason('');
+      // Auto-close modal after 1.5 seconds so user can see the success message
+      setTimeout(() => {
+        setUndoModal(null);
+        setUndoReason('');
+        setUndoSuccess('');
+      }, 1500);
     } catch (err: any) {
       setUndoError(err.message || 'Operation failed');
     } finally {
@@ -1140,6 +1148,12 @@ export default function HistoryPage({
               </div>
             )}
 
+            {undoSuccess && (
+              <div className="mb-3 p-3 rounded-lg text-sm" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.2)' }}>
+                {undoSuccess}
+              </div>
+            )}
+
             {undoModal.action === 'void' && (
               <div className="mb-4">
                 <label className="block text-xs mb-1 font-semibold" style={{ color: 'var(--text-secondary)' }}>Reason (required)</label>
@@ -1160,7 +1174,7 @@ export default function HistoryPage({
               </button>
               <button
                 onClick={handleUndoRedoConfirm}
-                disabled={undoLoading || (undoModal.action === 'restore' && !!undoError) || (undoModal.action === 'void' && (!!undoError || undoReason.trim().length < 3))}
+                disabled={undoLoading || undoSuccess || (undoModal.action === 'restore' && !!undoError) || (undoModal.action === 'void' && (!!undoError || undoReason.trim().length < 3))}
                 className="flex-1 py-2.5 rounded-xl text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-2"
                 style={{
                   background: undoModal.action === 'void'

@@ -90,7 +90,7 @@ export interface Product {
 
 export type PalletStatus = 'active' | 'dispatched' | 'expired' | 'damaged' | 'voided';
 export type MovementStatus = 'active' | 'voided';
-export type DocLifecycleStatus = 'active' | 'voided' | 'not_found';
+export type DocLifecycleStatus = 'active' | 'voided' | 'not_found' | 'partial';
 
 export interface DocStatusInfo {
   status: DocLifecycleStatus;

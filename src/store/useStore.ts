@@ -330,30 +330,22 @@ export function useStore(isLoggedIn = false, canLoadUsers = false) {
 
   const voidIGP = useCallback(async (igpNumber: string, reason: string) => {
     await stockApi.voidIGP(igpNumber, reason);
-    Promise.all([refreshPallets(), refreshMovements(), refreshCounters()]).catch(err => {
-      console.warn('Refresh after voidIGP failed:', err);
-    });
+    await Promise.all([refreshPallets(), refreshMovements(), refreshCounters()]);
   }, [refreshPallets, refreshMovements, refreshCounters]);
 
   const restoreIGP = useCallback(async (igpNumber: string) => {
     await stockApi.restoreIGP(igpNumber);
-    Promise.all([refreshPallets(), refreshMovements(), refreshCounters()]).catch(err => {
-      console.warn('Refresh after restoreIGP failed:', err);
-    });
+    await Promise.all([refreshPallets(), refreshMovements(), refreshCounters()]);
   }, [refreshPallets, refreshMovements, refreshCounters]);
 
   const voidOGP = useCallback(async (ogpNumber: string, reason: string) => {
     await stockApi.voidOGP(ogpNumber, reason);
-    Promise.all([refreshPallets(), refreshMovements(), refreshCounters()]).catch(err => {
-      console.warn('Refresh after voidOGP failed:', err);
-    });
+    await Promise.all([refreshPallets(), refreshMovements(), refreshCounters()]);
   }, [refreshPallets, refreshMovements, refreshCounters]);
 
   const restoreOGP = useCallback(async (ogpNumber: string) => {
     await stockApi.restoreOGP(ogpNumber);
-    Promise.all([refreshPallets(), refreshMovements(), refreshCounters()]).catch(err => {
-      console.warn('Refresh after restoreOGP failed:', err);
-    });
+    await Promise.all([refreshPallets(), refreshMovements(), refreshCounters()]);
   }, [refreshPallets, refreshMovements, refreshCounters]);
 
   const getDocStatus = useCallback(async (docNumber: string, type: 'IN' | 'OUT') => {
